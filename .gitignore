@@ -1,0 +1,30 @@
+# OS / editor noise
+.DS_Store
+*.swp
+*~
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# Runtime state (NOT part of the skill — lives under ~/.review-agent/ etc.)
+*.log
+*.tmp
+_first_msg.tmp
+
+# Local test artifacts
+test_logs/live/
+/tmp_sessions/
+
+# Anything with secrets (belt-and-suspenders — we don't store any, but guard future)
+*.env
+.env.local
+secrets/
+*.key
+*.pem
