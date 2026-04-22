@@ -1,0 +1,55 @@
+name: Feature request
+description: Propose a change or addition to review-agent
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before opening: skim [OPEN_ISSUES.md](../OPEN_ISSUES.md) — the request may already be on the v1.x roadmap there.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem you're trying to solve
+      description: Start with the problem, not the solution. What behavior of review-agent today is insufficient?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: What should happen instead? Be specific — file paths, trigger conditions, output format.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: What simpler or different approaches did you think about? Why did you reject them?
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - Small (single script change, no schema impact)
+        - Medium (touches multiple scripts or adds new stage)
+        - Large (architectural — new component or cross-cutting change)
+    validations:
+      required: true
+
+  - type: textarea
+    id: breaking
+    attributes:
+      label: Breaking changes
+      description: Does this break existing sessions, annotations schema, or user config? If yes, describe migration.
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Concrete use case
+      description: Walk through a specific scenario where this feature would be applied. Real > hypothetical.
+    validations:
+      required: true

@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 Install guide
+    url: https://github.com/jimmyag2026-prog/review-agent/blob/main/INSTALL.md
+    about: Setup walkthrough — prerequisites, OS package list, troubleshooting, uninstall
+  - name: 🏗️ Architecture & design docs
+    url: https://github.com/jimmyag2026-prog/review-agent/tree/main/design
+    about: Six-stage flow, three-role model, four-pillar framework, orchestrator design
+  - name: 🗺️ Open issues & roadmap
+    url: https://github.com/jimmyag2026-prog/review-agent/blob/main/OPEN_ISSUES.md
+    about: Deferred architectural problems with paths forward
+  - name: 🧩 Skill author notes
+    url: https://github.com/jimmyag2026-prog/review-agent/blob/main/publish/NOTES_FOR_SKILL_AUTHORS.md
+    about: Lessons learned building this skill — patterns and gotchas transferable to other agent skills

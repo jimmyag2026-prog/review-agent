@@ -1,0 +1,82 @@
+name: Bug report
+description: Something doesn't work as documented
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. To help us reproduce, please fill in as much as you can.
+        **Do not paste API keys, access tokens, or open_ids in this issue.**
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: A clear, short description of the actual behavior.
+      placeholder: |
+        e.g. "When I send /review start to the bot, the agent replies with tool invocation text (python3 scripts/...) instead of the subject confirmation message."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Numbered list. Include exact commands / messages.
+      value: |
+        1. `bash install.sh ...`
+        2. DM bot with `...`
+        3. Observed: `...`
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: "e.g. Ubuntu 22.04 / macOS 14.3 / Debian 12"
+    validations:
+      required: true
+
+  - type: input
+    id: hermes-version
+    attributes:
+      label: hermes version
+      description: "`hermes --version`"
+      placeholder: "e.g. 0.x.y"
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Python version
+      description: "`python3 --version`"
+      placeholder: "e.g. 3.11.x"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: |
+        Run the failing step and paste output. Scrub any `sk-`, `cli_`, `ou_` prefixed values.
+        Useful logs:
+          - `~/.review-agent/logs/delivery.jsonl`
+          - `~/.review-agent/logs/errors.jsonl`
+          - `~/.hermes/logs/gateway.log` (last ~50 lines)
+      render: text
+
+  - type: checkboxes
+    id: confirms
+    attributes:
+      label: Pre-submission checks
+      options:
+        - label: I ran `bash install/check_prereqs.sh` and all blocking checks pass.
+          required: true
+        - label: I scrubbed secrets and personal identifiers from the logs pasted above.
+          required: true
