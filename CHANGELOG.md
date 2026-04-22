@@ -17,6 +17,9 @@ All notable changes to review-agent are tracked here. Format: [Keep a Changelog]
 
 - `skill/scripts/check-profile.py` — scans a profile for leftover `<e.g., …>` / `<your …>` placeholders. Invoked by `install.sh` Phase B (user-facing warning) and `new-session.sh` (stderr log only, never blocks).
 - `~/.review-agent/enabled.json` stamp written after Phase B for install/enable-state detection.
+- **`docs/HERMES_FEISHU_HARDENING.md`** — three-layer hardening guide for multi-user Lark deployments: allowlist env, `unauthorized_dm_behavior: pair` config (note the key-based vs value-based fallback quirk in hermes), and a local hermes patch for admin-notify on pairing.
+- **`install/hermes_patches/admin_notify_patch.py`** — idempotent, marker-guarded patcher for `gateway/run.py`. Inserts a best-effort hook that DMs each `FEISHU_ADMIN_USERS` open_id whenever an unauthorized user triggers pairing. Supports `--dry-run` and `--revert`. Safe to re-run after `hermes update` overwrites the upstream file.
+- Troubleshooting entries in `INSTALL.md` and `docs/VPS_SETUP.md` for: stale gateway PID file, silent drop of unauthorized DMs when allowlist is non-empty, fail2ban dropping SSH on rapid reconnects.
 
 ## [1.0.0] — 2026-04-22
 

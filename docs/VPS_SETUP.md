@@ -370,6 +370,23 @@ grep -A 4 'platforms:' ~/.hermes/config.yaml
 systemctl --user restart hermes-gateway
 ```
 
+**Gateway fails to start with "PID file race lost to another gateway instance"**
+→ stale PID file from a previous run; process is dead but `~/.hermes/gateway.pid` wasn't cleared.
+```bash
+rm -f ~/.hermes/gateway.pid
+systemctl --user reset-failed hermes-gateway
+systemctl --user restart hermes-gateway
+```
+
+**Unauthorized users DM the bot but I get no notification**
+→ See [docs/HERMES_FEISHU_HARDENING.md](HERMES_FEISHU_HARDENING.md) — apply the admin-notify patch (Layer 3) so you're DMed whenever a new user triggers pairing.
+
+**Unauthorized users DM the bot and get no reply (silent drop) after I set an allowlist**
+→ Add `feishu: { unauthorized_dm_behavior: pair }` to `~/.hermes/config.yaml` as a sub-block. Setting it at the top level does NOT work — hermes' lookup uses a per-platform key-exists check. See [HARDENING doc Layer 2](HERMES_FEISHU_HARDENING.md#layer-2--configyaml-pair-prompt-not-ignore).
+
+**fail2ban drops SSH after rapid reconnects**
+→ Multiple back-to-back `ssh`/`scp` trips your own VPS's fail2ban. Bundle commands into one SSH session (`ssh host -- 'cmd1 && cmd2'`) or wait for the ban window to clear (`until nc -z your.vps.ip 22; do sleep 5; done`).
+
 **High RAM usage**
 → Normal is ~200-400MB. If > 1GB, check `~/.hermes/logs/` for runaway session files. Consider archiving old sessions:
 ```bash
@@ -397,6 +414,39 @@ rm -rf ~/.review-agent/sessions/_closed/*
 - **Lark app scopes**: grant only what's listed in INSTALL.md. Don't grant admin-level scopes.
 - **OpenRouter key budget**: set a monthly cap in OpenRouter dashboard as circuit breaker.
 - **Audit trail**: `~/.review-agent/logs/delivery.jsonl` keeps a record of every message sent out. Review periodically.
+
+---
+
+## Multi-user hardening (allowlist + pairing + admin notify)
+
+If anyone in your Lark org can DM the bot, you'll want to restrict access. The default `FEISHU_ALLOW_ALL_USERS=true` is fine for solo use but open in any larger workspace. A three-layer hardening setup (allowlist env + `unauthorized_dm_behavior: pair` config + local hermes patch for admin-notify) is documented in [docs/HERMES_FEISHU_HARDENING.md](HERMES_FEISHU_HARDENING.md).
+
+Short version:
+
+```bash
+# Layer 1: .env
+cat >> ~/.hermes/.env <<'EOF'
+FEISHU_ALLOW_ALL_USERS=false
+FEISHU_ALLOWED_USERS=ou_aaaa,ou_bbbb
+FEISHU_ADMIN_USERS=ou_aaaa
+EOF
+
+# Layer 2: config.yaml — feishu: block MUST use key-based form
+python3 -c "
+import yaml; p = '$HOME/.hermes/config.yaml'
+c = yaml.safe_load(open(p)) or {}
+c.setdefault('feishu', {})['unauthorized_dm_behavior'] = 'pair'
+yaml.safe_dump(c, open(p,'w'), default_flow_style=False, sort_keys=False)
+"
+
+# Layer 3: patch hermes run.py for admin notify on pairing
+python3 ~/code/review-agent/install/hermes_patches/admin_notify_patch.py \
+  --run-py ~/.hermes/hermes-agent/gateway/run.py
+
+systemctl --user restart hermes-gateway
+```
+
+The patch script is idempotent and marker-guarded, so `hermes update` overwriting `run.py` is recoverable by re-running it (add it to your post-update routine).
 
 ---
 

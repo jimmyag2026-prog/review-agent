@@ -294,6 +294,25 @@ vim ~/.hermes/memories/MEMORY.md
 **"scan.py 失败: no OPENROUTER_API_KEY"**
 → `echo 'OPENROUTER_API_KEY=sk-or-v1-xxx' >> ~/.hermes/.env` 然后 gateway restart
 
+**"Unauthorized users DM 我的 bot 但我收不到通知 / 想限制谁能用"**
+→ 多用户 / VPS 部署的 hardening 见 [docs/HERMES_FEISHU_HARDENING.md](docs/HERMES_FEISHU_HARDENING.md) — 三层配置（allowlist env + `unauthorized_dm_behavior: pair` + admin-notify patch）。
+
+**"设了 FEISHU_ALLOWED_USERS 后未授权用户 DM 直接被静默丢弃"**
+→ 这是 hermes 的默认 fallback。加 `~/.hermes/config.yaml`:
+```yaml
+feishu:
+  unauthorized_dm_behavior: pair
+```
+必须写在 `feishu:` 子块（key-based 判断），顶层写 `unauthorized_dm_behavior: pair` 不生效。详见 [HARDENING 文档 Layer 2](docs/HERMES_FEISHU_HARDENING.md#layer-2--configyaml-pair-prompt-not-ignore)。
+
+**"gateway 起不来 — PID file race lost to another gateway instance"**
+→ `~/.hermes/gateway.pid` 里的 PID 已死但文件留下了。
+```bash
+rm -f ~/.hermes/gateway.pid
+systemctl --user reset-failed hermes-gateway
+systemctl --user restart hermes-gateway
+```
+
 **"lark-doc-publish 报 scope 错误"**
 → 在 Lark 开发者后台给 bot 加：`im:message:send_as_bot`, `im:message`, `docx:document`, `drive:file`, `drive:drive`
 
