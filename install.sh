@@ -163,6 +163,19 @@ phase_enable() {
 EOF
   echo -e "${GREEN}✓${NC} wrote $ROOT/enabled.json"
 
+  # Check for unfilled profile placeholders — warn, don't block
+  RESPONDER_CHECK_OID="${RESPONDER_OID:-$ADMIN_OID}"
+  PROFILE_PATH="$ROOT/users/$RESPONDER_CHECK_OID/profile.md"
+  if [ -f "$PROFILE_PATH" ]; then
+    banner "Phase B · Profile sanity check"
+    if ! python3 "$SKILL_DST/scripts/check-profile.py" "$PROFILE_PATH"; then
+      echo
+      echo -e "${YELLOW}!${NC} The profile above still has template placeholders."
+      echo "  The agent will run with the built-in default, but reviews will be generic"
+      echo "  until you personalize these lines."
+    fi
+  fi
+
   banner "Done — review-agent ENABLED"
   cat <<EOF
 

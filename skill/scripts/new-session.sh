@@ -73,6 +73,17 @@ cp "$ROOT/users/$RESPONDER_OID/profile.md" "$SESSION_DIR/profile.md"
 cp "$ROOT/rules/review_rules.md" "$SESSION_DIR/review_rules.md"
 [ -n "$CRITERIA_SRC" ] && [ -f "$CRITERIA_SRC" ] && cp "$CRITERIA_SRC" "$SESSION_DIR/review_criteria.md"
 
+# Profile placeholder sanity check — stderr only, never block (orchestrator
+# pipes stdout to Lark; any leak here becomes a user-facing message)
+SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+if [ -f "$SKILL_DIR/scripts/check-profile.py" ]; then
+  python3 "$SKILL_DIR/scripts/check-profile.py" "$SESSION_DIR/profile.md" --quiet 2>/dev/null
+  PROFILE_RC=$?
+  if [ $PROFILE_RC -eq 1 ]; then
+    echo "[new-session] warn: Responder profile still has template placeholders ($SESSION_DIR/profile.md) — review will use generic defaults." >&2
+  fi
+fi
+
 ORIG_CHAT_JSON="null"
 if [ -n "$ORIG_CHAT" ]; then
   ORIG_CHAT_JSON=$(python3 -c "

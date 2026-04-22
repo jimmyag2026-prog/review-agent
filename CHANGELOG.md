@@ -10,6 +10,13 @@ All notable changes to review-agent are tracked here. Format: [Keep a Changelog]
 - New shared helper `skill/scripts/_model.py` exposes `get_main_agent_model()`.
 - `--model` CLI flag on each script now defaults to `None` (resolve at call time) instead of a hardcoded string. Pass `--model <id>` to override per-call.
 - Removed `model:` pin from `skill/SKILL.md` frontmatter.
+- **Installer split into two phases**: Phase A installs files (always runs, reversible), Phase B configures Admin/Responder + patches `config.yaml` + installs MEMORY.md SOP (opt-in via prompt or `--enable-only`). Run with `--install-only` to stage files without activating.
+- **Responder profile default**: `boss_profile.md` template rewritten as a functional senior-reviewer default — reviews now work out of the box without editing, though personalizing still improves quality. Old version was all placeholders and produced degraded reviews when unedited.
+
+### Added
+
+- `skill/scripts/check-profile.py` — scans a profile for leftover `<e.g., …>` / `<your …>` placeholders. Invoked by `install.sh` Phase B (user-facing warning) and `new-session.sh` (stderr log only, never blocks).
+- `~/.review-agent/enabled.json` stamp written after Phase B for install/enable-state detection.
 
 ## [1.0.0] — 2026-04-22
 

@@ -195,7 +195,9 @@ Your "pet peeves", decision style, time budget, things to always ask.
 vim ~/.review-agent/users/<your_open_id>/profile.md
 ```
 
-Bad defaults → bad reviews. Take 10 minutes.
+The file ships with a **functional default** (senior reviewer / data-first / fast yes-no / standard CSW pet peeves). Reviews work out of the box, but personalizing the file noticeably improves review quality — see the "Editing checklist" at the bottom of the profile.
+
+**Placeholder guard**: Phase B of the installer and every `/review start` run a scan (`scripts/check-profile.py`) for leftover `<e.g., …>` / `<your …>` patterns. If any are found, a warning is logged — the review still runs but falls back to generic defaults for those fields.
 
 ### 2. (Optional) Customize agent style
 
