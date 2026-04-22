@@ -30,7 +30,12 @@ def load_env_key(env_path, key):
     return None
 
 
-def call_openrouter(system_prompt, user_prompt, model="anthropic/claude-sonnet-4.6"):
+sys.path.insert(0, str(Path(__file__).parent))
+from _model import get_main_agent_model
+
+
+def call_openrouter(system_prompt, user_prompt, model=None):
+    if model is None: model = get_main_agent_model()
     """Call OpenRouter chat completions with given messages."""
     api_key = load_env_key(Path.home() / ".hermes" / ".env", "OPENROUTER_API_KEY")
     if not api_key:
@@ -194,7 +199,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("session_dir")
     ap.add_argument("--send", action="store_true", help="send via send-lark.sh")
-    ap.add_argument("--model", default="anthropic/claude-sonnet-4.6")
+    ap.add_argument("--model", default=None,
+                    help="override model id (OpenRouter format); default: follow ~/.hermes/config.yaml model.default")
     args = ap.parse_args()
 
     sd = Path(args.session_dir)

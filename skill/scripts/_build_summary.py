@@ -357,7 +357,13 @@ def resolve_requester(sd: Path):
     return name, oid
 
 
-def build_synthesis_brief(sd: Path, model: str = "anthropic/claude-sonnet-4.6") -> str:
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).parent))
+from _model import get_main_agent_model
+
+
+def build_synthesis_brief(sd: Path, model: str = None) -> str:
+    if model is None: model = get_main_agent_model()
     """LLM-synthesized 6-section decision brief. Falls back to audit if LLM fails."""
     meta = json.load(open(sd / "meta.json"))
     ann = load_jsonl(sd / "annotations.jsonl")

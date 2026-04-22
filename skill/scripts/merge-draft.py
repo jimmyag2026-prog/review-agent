@@ -109,7 +109,8 @@ Q&A 已经跑完——Requester 对 findings 做了回复（accepted / rejected 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("session_dir")
-    ap.add_argument("--model", default="anthropic/claude-sonnet-4.6")
+    ap.add_argument("--model", default=None,
+                    help="override model id; default: follow ~/.hermes/config.yaml main agent model")
     ap.add_argument("--send-preview", action="store_true",
                    help="send the DIFF-HIGHLIGHTS to Requester via Lark for confirmation")
     ap.add_argument("--dry-run", action="store_true")
@@ -119,6 +120,12 @@ def main():
     if not sd.is_dir():
         print(f"error: {sd} not a directory", file=sys.stderr)
         sys.exit(2)
+
+    # Resolve model from hermes config if not overridden
+    if args.model is None:
+        sys.path.insert(0, str(Path(__file__).parent))
+        from _model import get_main_agent_model
+        args.model = get_main_agent_model()
 
     # Load material + annotations
     normalized = (sd / "normalized.md").read_text() if (sd / "normalized.md").exists() else ""

@@ -43,7 +43,12 @@ def load_env_key(env_path, key):
     return None
 
 
-def call_openrouter(system_prompt, user_prompt, model="anthropic/claude-sonnet-4.6", max_tokens=800):
+sys.path.insert(0, str(Path(__file__).parent))
+from _model import get_main_agent_model
+
+
+def call_openrouter(system_prompt, user_prompt, model=None, max_tokens=800):
+    if model is None: model = get_main_agent_model()
     api_key = load_env_key(Path.home() / ".hermes" / ".env", "OPENROUTER_API_KEY")
     if not api_key:
         return None, "no OPENROUTER_API_KEY"
@@ -409,7 +414,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("session_id")
     ap.add_argument("message", help="requester's latest Lark message text")
-    ap.add_argument("--model", default="anthropic/claude-sonnet-4.6")
+    ap.add_argument("--model", default=None,
+                    help="override model id; default: follow ~/.hermes/config.yaml main agent model")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 

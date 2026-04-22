@@ -2,6 +2,15 @@
 
 All notable changes to review-agent are tracked here. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Changed
+
+- **LLM model follows hermes main agent** instead of hard-pinning `anthropic/claude-sonnet-4.6`. All LLM-calling scripts now resolve the model from `~/.hermes/config.yaml` → `model.default` and map hermes-style ids to OpenRouter format (strip `-YYYYMMDD` date suffix, convert trailing `-N-N` to `-N.N`, add provider prefix). Precedence: `REVIEW_AGENT_MODEL` env var > hermes config > fallback `anthropic/claude-sonnet-4.6`.
+- New shared helper `skill/scripts/_model.py` exposes `get_main_agent_model()`.
+- `--model` CLI flag on each script now defaults to `None` (resolve at call time) instead of a hardcoded string. Pass `--model <id>` to override per-call.
+- Removed `model:` pin from `skill/SKILL.md` frontmatter.
+
 ## [1.0.0] — 2026-04-22
 
 First public release. Complete end-to-end pipeline for async pre-meeting review coaching via Lark IM + Lark Doc, with a local admin dashboard.

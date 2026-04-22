@@ -7,7 +7,6 @@ license: MIT
 argument-hint: "[command] [args]"
 disable-model-invocation: false
 allowed-tools: Read Write Bash(bash *) Bash(python3 *) Bash(hermes *) Bash(~/bin/*)
-model: claude-sonnet-4-6
 metadata:
   hermes:
     tags: [Review, Meeting, Briefing, Lark, Feishu, Coaching, CSW, PreMeeting]

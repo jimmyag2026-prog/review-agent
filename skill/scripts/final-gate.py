@@ -65,7 +65,12 @@ def load_env_key(env_path, key):
     return None
 
 
-def verify_final_against_accepted(sd: Path, accepted_findings: list, model: str = "anthropic/claude-sonnet-4.6"):
+def verify_final_against_accepted(sd: Path, accepted_findings: list, model: str = None):
+    if model is None:
+        import sys as _sys
+        _sys.path.insert(0, str(Path(__file__).parent))
+        from _model import get_main_agent_model
+        model = get_main_agent_model()
     """LLM re-scan: did the revised final/<primary>.md preserve what was accepted?
 
     Returns: dict with {regressions_detected: bool, preserved: int, missing: int, missing_ids: [...]}
