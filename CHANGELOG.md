@@ -21,6 +21,13 @@ All notable changes to review-agent are tracked here. Format: [Keep a Changelog]
 - **`install/hermes_patches/admin_notify_patch.py`** — idempotent, marker-guarded patcher for `gateway/run.py`. Inserts a best-effort hook that DMs each `FEISHU_ADMIN_USERS` open_id whenever an unauthorized user triggers pairing. Supports `--dry-run` and `--revert`. Safe to re-run after `hermes update` overwrites the upstream file.
 - Troubleshooting entries in `INSTALL.md` and `docs/VPS_SETUP.md` for: stale gateway PID file, silent drop of unauthorized DMs when allowlist is non-empty, fail2ban dropping SSH on rapid reconnects.
 
+### Fixed
+
+- **PDF / attachment dialog removed** (reported 2026-04-22): when a Requester sent a PDF, the main agent would reply "收到 PDF 文件 📄 你想怎么处理？…" and list options. SOP now has an explicit hard rule: any attachment from a Requester = immediate `review-cmd.sh start`, no dialogue. Size guardrails added (>20 MB PDF or >100 pages → ask for smaller version; >10 MB image; >50 MB / >30 min audio). ingest.py already handles PDF/image/audio extraction inside the session, so the main agent should never run `pdftotext` / `pdfminer` / `whisper` itself.
+- **`💻 terminal:` tool-call previews leaking into Lark** (reported 2026-04-22): broadened `patch_hermes_config.py` with defensive OFF values for `show_tool_calls`, `show_tool_results`, `show_code_blocks`, `show_bash` (unknown keys are harmless on hermes versions that ignore them). SOP also gained an explicit "progress messages" protocol: one short "处理中…" message while ingest/scan run; never relay tool previews, stderr, or tracebacks.
+- **SOP bumped to v2** with auto-upgrade: `patch_memory_sop.py` now detects an older-version install and replaces the block in place (preserving everything after the `§` separator), instead of refusing to run because the v1 marker exists.
+- **`feishu.unauthorized_dm_behavior: pair`** now seeded by `patch_hermes_config.py` on fresh installs (only if absent — respects explicit user choice) so the Layer 2 hardening from HERMES_FEISHU_HARDENING.md is the default rather than opt-in.
+
 ## [1.0.0] — 2026-04-22
 
 First public release. Complete end-to-end pipeline for async pre-meeting review coaching via Lark IM + Lark Doc, with a local admin dashboard.

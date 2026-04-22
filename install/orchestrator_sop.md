@@ -1,6 +1,6 @@
 # 🚨 CRITICAL — REVIEW-AGENT ROUTING (highest priority, read before replying to any Lark message)
 
-<!-- review-agent:orchestrator-sop:v1 -->
+<!-- review-agent:orchestrator-sop:v2 -->
 
 Before replying to ANY Lark DM or group @-mention, run this decision tree. Do **NOT** respond with your own analysis until step 0-4 below complete. Violating this SOP caused a production incident on 2026-04 (see ANTI-PATTERN below).
 
@@ -43,24 +43,41 @@ If `~/.review-agent/users/<sender_oid>/active_session.json` EXISTS and points to
 
 ## Step 4 — Requester context: no active_session, check for REVIEW-NEW intent
 
-### Strong triggers (IMMEDIATELY start review, do NOT chat first)
+### 🚨 Hard rule: ATTACHMENT FROM REQUESTER = IMMEDIATE REVIEW START
 
-If ANY of these match, run `review-cmd.sh <oid> start "<inferred_subject>"`:
+If the incoming message from a Requester includes **any** of:
 
-**Keyword-based (Chinese):**
-- 含 "review" / "看一下" / "帮我看" / "讨论一下" / "找<responder>/上级 讨论" / "汇报" / "brief" / "审核" / "评估" / "想和你说"
-- 含 "我有个方案" / "我的想法" / "我的 proposal" / "初稿" / "给<responder>看"
-- 含 "预约" / "想约" / "想见 <responder>"
+- A file attachment (PDF / DOCX / image / audio / any mime)
+- A Lark doc / wiki link
+- A Google Doc / Sheet / Slide link
+- A long text block (>300 chars) that reads like a proposal / brief / plan
 
-**Keyword-based (English):**
-- "review", "check", "pre-read", "brief me", "draft", "feedback", "thoughts on", "want to discuss", "want to talk about", "get your input", "book time with"
+→ **immediately** run `review-cmd.sh <oid> start "<inferred_subject>"` and pipe stdout to `send-lark.sh`. The ingest script handles the attachment (PDFs via `pdftotext` / `pdfminer.six`, images via OCR, audio via whisper, etc.) — you do **not** need to extract content yourself.
 
-**Structural:**
-- Message contains attached file / Lark doc URL / Google Doc URL / any doc link
-- Message contains structured proposal (headers / tables / option lists)
-- Message contains explicit ask ("请批准 X" / "帮我决定 A 还是 B" / "approve/reject this")
+**Size guardrail (and the only case to ask first):**
+- PDF > 20 MB or > 100 pages → reply once: "文件有点大（X MB / N 页），能发小一点的版本或拆成几段吗？" Do NOT try to process it.
+- Image > 10 MB → same pattern.
+- Audio > 50 MB or > 30 min → same pattern.
+
+**⛔ DO NOT**
+- Ask "你想怎么处理？" / "提交为 review 材料 还是 直接分析？" — the SOP already knows: attachment = review.
+- List options ("1. review / 2. analyze / 3. other") — skip the dialogue, start the review.
+- Run `python3 -c "import pypdf..."` / `pdftotext ...` / `pip install ...` yourself to extract content. `ingest.py` does this inside the session, not at the main-agent level.
+- Reply with the extracted content. Routing stops at `review-cmd.sh`; ingest + scan run inside that path.
+
+### Strong keyword triggers (same as above — IMMEDIATELY start, do NOT chat first)
+
+If NO attachment but ANY of these keywords match, also run `review-cmd.sh <oid> start "<inferred_subject>"`:
+
+**Chinese:** "review" / "看一下" / "帮我看" / "讨论一下" / "找<responder>/上级 讨论" / "汇报" / "brief" / "审核" / "评估" / "想和你说" / "我有个方案" / "我的想法" / "我的 proposal" / "初稿" / "给<responder>看" / "预约" / "想约" / "想见 <responder>"
+
+**English:** "review", "check", "pre-read", "brief me", "draft", "feedback", "thoughts on", "want to discuss", "want to talk about", "get your input", "book time with"
+
+**Other structural:** explicit ask ("请批准 X" / "帮我决定 A 还是 B" / "approve/reject this")
 
 ### Weak / ambiguous — CLARIFY, do not guess
+
+**Only applies when there is NO attachment and NO strong keyword.** Examples:
 
 "帮我看看这个" 无附件 / "<responder_name> 会怎么想" 无材料 / "我想讨论" 无对象 → reply ONE clarifying question:
 "这条是要走 review 流程（我会按 <responder_name> 的标准帮你审并产出给他的汇报材料），还是只是普通聊天？"
@@ -68,6 +85,14 @@ If ANY of these match, run `review-cmd.sh <oid> start "<inferred_subject>"`:
 ### No trigger → normal chat
 
 测试 "你在吗" / 闲聊 / 无关问题 → normal response.
+
+### Progress messages while `review-cmd.sh` / `ingest.py` are running
+
+Scripts may take 5–30s (PDF extract + LLM scan). While waiting:
+
+- **Allowed**: send ONE short Lark message like "收到，处理中…" or "正在读材料（约 20s）…"
+- **Forbidden**: relay any `💻 terminal: ...` tool preview, bash command, stderr, or Python traceback to Lark. Those are `display.platforms.feishu` render leaks — they must be suppressed by config (see `install/patch_hermes_config.py`). If you see them reaching Lark, the gateway wasn't restarted after the config patch, or the feishu display tier isn't MINIMAL.
+- **Never** chain multiple progress messages ("extracting…", "now scanning…", "now summarizing…"). One "处理中" is enough; the next message should be the first review finding itself.
 
 ## Step 5 — Group @-mention
 
@@ -167,4 +192,4 @@ bash ~/.hermes/skills/productivity/review-agent/scripts/review-cmd.sh \
 - Skill dir: `~/.hermes/skills/productivity/review-agent/`
 - Key scripts: `scripts/review-cmd.sh` (explicit cmds), `scripts/qa-step.py` (review-active mode), `scripts/scan.py` (four-pillar+simulation), `scripts/send-lark.sh` (all outbound)
 
-<!-- /review-agent:orchestrator-sop:v1 -->
+<!-- /review-agent:orchestrator-sop:v2 -->
