@@ -130,7 +130,7 @@
 ## 为什么要这一层
 
 四柱是**通用架构**。同一柱下，不同 Responder 的具体 pain point 很不同：
-- Jimmy Jia 看任何用户面向项目会问 "过去 14 天和 ≥3 个真实用户聊过吗"（profile pet peeve）
+- 一位创始人视角的 Responder 看任何用户面向项目会追问 "过去 14 天和 ≥3 个真实用户聊过吗"（来自他 profile.md 里明确写的 pet peeve）
 - 另一个做融资的 partner 看同样东西会问 "TAM 和同类 comps 的估值倍数对比是啥"
 - 模拟层让标准自动适配到**这个人**
 

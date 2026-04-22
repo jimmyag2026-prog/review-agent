@@ -2,7 +2,7 @@
 
 <!-- review-agent:orchestrator-sop:v1 -->
 
-Before replying to ANY Lark DM or group @-mention, run this decision tree. Do **NOT** respond with your own analysis until step 0-4 below complete. Violating this SOP caused a production incident on 2026-04-20 (Evie's case — see ANTI-PATTERN below).
+Before replying to ANY Lark DM or group @-mention, run this decision tree. Do **NOT** respond with your own analysis until step 0-4 below complete. Violating this SOP caused a production incident on 2026-04 (see ANTI-PATTERN below).
 
 ## Step 0 — Always identify sender first
 
@@ -75,18 +75,18 @@ Same tree applies. On review-new start, also reply in group ONE LINE: "先到私
 
 ---
 
-## ⚠ ANTI-PATTERN (2026-04-20 real incident — Evie case)
+## ⚠ ANTI-PATTERN (2026-04 real incident)
 
-**What happened**: Evie (Requester) sent a Lark DM "我想和 jimmy 讨论这个材料 你帮我 review 一下" + a Lark wiki link. The main agent (me, in that session) immediately:
+**What happened**: A Requester sent a Lark DM "我想和 <Responder> 讨论这个材料 你帮我 review 一下" + a Lark wiki link. The main agent immediately:
 1. Fetched the wiki content via Lark tool
 2. Wrote a full review summary of the content
-3. When Evie said "好的 先提提建议", drafted a brief FOR Evie (table of tools, questions for Jimmy)
-4. Offered to send the draft to Jimmy directly
+3. When the Requester said "好的 先提提建议", drafted a brief FOR the Requester (table of tools, questions for the Responder)
+4. Offered to send the draft to the Responder directly
 
 **Why this was WRONG**:
-- Skipped Step 0 (didn't check if Evie was a Requester with active/pending review)
-- "我想和 jimmy 讨论" + "帮我 review" are TEXTBOOK strong triggers → should have invoked `review-cmd.sh start`, NOT analyzed the content
-- Drafted brief ends with 3 questions TO Jimmy → violates CSW (no-boss-burden)
+- Skipped Step 0 (didn't check if the sender was a Requester with active/pending review)
+- "我想和 <Responder> 讨论" + "帮我 review" are TEXTBOOK strong triggers → should have invoked `review-cmd.sh start`, NOT analyzed the content
+- Drafted brief ends with 3 questions TO the Responder → violates CSW (no-boss-burden)
 - Never went through confirm-topic / four-pillar scan / Q&A loop
 - Bypassed the entire review-agent skill
 
@@ -97,7 +97,7 @@ bash ~/.hermes/skills/productivity/review-agent/scripts/review-cmd.sh \
 # then send stdout back via send-lark.sh
 ```
 
-**Prevention**: before touching any Lark inbound content, ALWAYS run Step 0-4 in order. No exceptions. If ever tempted to "just help by reviewing directly", STOP — that's the Evie-hijack pattern.
+**Prevention**: before touching any Lark inbound content, ALWAYS run Step 0-4 in order. No exceptions. If ever tempted to "just help by reviewing directly", STOP — that's the hijack anti-pattern.
 
 ---
 

@@ -15,7 +15,7 @@
 
 2. **脚本输出契约（弱保障）**：脚本 stdout 只给 IM 回复文本；stderr 只给 lifecycle markers（`[qa-step] intent=... cursor_advance=...`）。不回显 Requester 材料、profile、finding 内容。主 agent 读 stderr 拿不到 session 细节。
 
-3. **文档硬规则（discipline）**：`MEMORY.md` 顶部的 "🚨 CRITICAL" block + "⚠ SESSION CONTEXT ISOLATION" 段 + `SKILL.md` 的 Session Context Isolation 硬规则 + Evie-hijack 反例——要求主 agent **永不 cat/Read session 文件**，**只查 meta.json + active_session.json** 做路由，**不做任何 session content reasoning**。
+3. **文档硬规则（discipline）**：`MEMORY.md` 顶部的 "🚨 CRITICAL" block + "⚠ SESSION CONTEXT ISOLATION" 段 + `SKILL.md` 的 Session Context Isolation 硬规则 + hijack 反例——要求主 agent **永不 cat/Read session 文件**，**只查 meta.json + active_session.json** 做路由，**不做任何 session content reasoning**。
 
 ### 为什么 v0 不上硬约束
 
@@ -30,7 +30,7 @@
 
 - 路由决策用 `sender_oid → meta.json`，纯 deterministic，不受主 agent context 污染影响
 - 脚本的 LLM 上下文独立，不继承主 agent 污染
-- 唯一真实风险是**主 agent 违反文档规则主动 analyze session 内容**——用 Evie 劫持反例 + 硬规则约束，接受软保障
+- 唯一真实风险是**主 agent 违反文档规则主动 analyze session 内容**——用劫持反例 + 硬规则约束，接受软保障
 
 ### 未来要彻底解决时的路径
 

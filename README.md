@@ -1,51 +1,36 @@
-# review_agent_development
+# review-agent
 
-Development folder for the `review-agent` skill — a Completed-Staff-Work-style pre-meeting review coach for hermes/openclaw agents.
+**An async pre-meeting review coach for hermes + Lark.** Before a Requester gets time with a Responder, review-agent challenges their draft through six dimensions of scrutiny (data / logic / feasibility / stakeholders / risk / ROI), runs them through a Q&A loop until the material is decision-ready, then hands the Responder a distilled pre-read.
 
-## Folder map
+Rooted in the 1942 US Army doctrine of **Completed Staff Work**: "the chief only signs yes or no; all the thinking has been done by staff." Modernized with LLM orchestration + Lark Doc integration.
 
-```
-review_agent_development/
-├── research/                         # Step 1 — landscape + skill conventions
-│   ├── 01_landscape.md              # methodology survey (CSW, BLUF, 6-pager, red team, policy memo, market gap)
-│   └── 02_hermes_skill_conventions.md # SKILL.md format + hermes/openclaw mechanics
-├── design/                           # Step 2 — framework (v1 is final)
-│   ├── framework.md                 # v0 (superseded — kept for history)
-│   ├── framework_v1.md              # v1 — IM + async subtask architecture, 10 design gaps answered
-│   └── workflow.md                  # detailed per-session lifecycle
-├── skill/                            # Step 3 — shippable skill (installed via symlink)
-│   ├── SKILL.md                     # manager skill entry
-│   ├── references/                  # checklists, schema, templates, delivery spec
-│   │   ├── checklist.md             # seven-axis review criteria
-│   │   ├── annotation_schema.md     # sidecar JSONL format
-│   │   ├── summary_template.md      # boss-summary structure
-│   │   ├── delivery/README.md       # delivery backend spec (lark_dm, email, local, ...)
-│   │   └── template/                # per-peer workspace template (AGENTS.md, profile, rules)
-│   └── scripts/                     # setup / add-reviewer / new-session / close-session / deliver / dashboard / ...
-├── test_logs/                        # Step 3 validation
-│   └── test-plan.md                 # smoke-test results + end-to-end manual plan
-└── publish/                          # Step 4 — release artifacts
-    ├── README.md                    # public README (clone + install + use)
-    ├── LESSONS.md                   # abstracted design lessons for skill authors
-    └── NOTES_FOR_SKILL_AUTHORS.md   # gotchas and checklists
-```
+> **Status**: v1.0 — usable end-to-end on a fresh hermes + Lark install. See [CHANGELOG.md](CHANGELOG.md) for what's in and what's known-limited.
 
-## Status
+## What it does
 
-- [x] Step 1: Research (CSW as backbone; market gap confirmed — no "proxy coach" tool exists)
-- [x] Step 2: Design v1 (ten gaps answered, all architectural decisions locked)
-- [x] Step 3: Implementation (smoke-tested; copied to `~/.hermes/skills/productivity/review-agent/`)
-- [x] Step 3.5: Framework evolution — 7-axis → 4-pillar + Responder simulation
-- [x] Step 3.6: Orchestrator layer (MEMORY.md SOP + review-cmd/start-review/qa-step/confirm-and-scan)
-- [x] Step 3.7: Document merge (`merge-draft.py`) + final-gate `--verify-final`
-- [x] Step 3.8: Six challenge dimensions + challenger core principle into persona
-- [x] Step 3.9: Decision-ready 6-section brief output (LLM synthesis) + audit trail
-- [x] Step 3.10: Local web dashboard (`dashboard-server.py` / `dashboard-web.sh`) at http://127.0.0.1:8765
-- [x] Step 4: Publish artifacts (README, lessons, skill-author notes)
+- **Inbound**: Requester DMs a Lark bot with a draft / doc link / proposal.
+- **Pipeline**: subject-alignment → four-pillar scan + Responder simulation → Q&A loop with shortcut replies → revised draft → final-gate → decision-ready brief.
+- **Outputs**:
+  - **Live Lark Doc** with original material + inline agent callouts
+  - **6-section decision brief** delivered to Responder via Lark DM on close
+  - **Local admin dashboard** at `http://127.0.0.1:8765`
 
-## Install on a new hermes
+## Core principle
 
-**Pre-configured machine** (has hermes + creds):
+Agent = **challenger**, not summarizer. Points out problems. Asks questions. Never writes the answer for the Requester. The Responder gets material that's already been through the critical eye — their meeting time goes into decisions, not context rebuilding.
+
+The six challenge dimensions covered in every review:
+
+1. **Data integrity** · "You said growth is good — where are the DAU / retention numbers?"
+2. **Logical consistency** · "You want to kill feature A, but earlier called it the core value — reconcile."
+3. **Plan feasibility** · "Three engineers for two months, but the team has one person."
+4. **Stakeholders** · "Legal / compliance weren't consulted — this project touches user data."
+5. **Risk assessment** · "What's Plan B if the main approach fails? Not in the material."
+6. **ROI clarity** · "Expected upside is $1M — where's the cost estimate?"
+
+## Install
+
+**Pre-configured machine** (hermes + Lark creds already present):
 
 ```bash
 gh repo clone jimmyag2026-prog/review-agent ~/code/review-agent
@@ -61,44 +46,88 @@ git clone https://github.com/jimmyag2026-prog/review-agent.git ~/code/review-age
 cd ~/code/review-agent
 bash install/bootstrap.sh
 
-# 2. then install hermes, configure ~/.hermes/.env with Lark + OpenRouter creds
+# 2. install hermes, configure ~/.hermes/.env with Lark + OpenRouter creds
 # 3. finally:
 bash install.sh
 ```
 
-See [`INSTALL.md`](INSTALL.md) for the full walkthrough, including prerequisites, OS package list, repo-access without `gh`, verify steps, and troubleshooting.
+See [**INSTALL.md**](INSTALL.md) for the full walkthrough: prerequisites, OS package lists, repo-access options (gh / SSH / PAT), verify steps, troubleshooting, uninstall.
 
-## Open issues (deferred)
+## Architecture
 
-See [`OPEN_ISSUES.md`](OPEN_ISSUES.md) for deferred architectural problems.
+```
+Lark inbound → hermes main agent → MEMORY.md SOP
+                                    │
+             ┌──────────────────────┼──────────────────────┐
+             │                      │                      │
+      unregistered           Admin/Responder          Requester
+      polite refuse          normal chat / mgmt cmds  check /review cmd
+                                                       │
+                                   ┌───────────────────┤
+                                   │                   │
+                          active session?         no active session
+                          qa-step.py              +review intent?
+                                                       │
+                                       start-review.sh (ingest →
+                                       confirm-topic → scan →
+                                       auto-scope top-3 →
+                                       lark-doc-publish)
+                                                       │
+                                   Q&A loop with a/b/c/p/custom shortcuts
+                                                       │
+                              final-gate → _build_summary (LLM synth)
+                                                       │
+                              deliver: Lark DM to Responder + Requester
+                                        + local archive + optional email
+```
 
-Current entries:
-- **I-001** — Session context isolation has only soft (doc + script) guarantees at the main-agent layer. Future hard fix path: session-broker, or full migration to openclaw-style per-peer agent architecture.
+Runtime: **hermes** (native Lark gateway) + **OpenRouter** (Sonnet 4.6 default).
+Storage: `~/.review-agent/` (users / sessions / rules / logs).
+Dashboard: `http://127.0.0.1:8765` (local-only, read-only).
 
-## Why the end-to-end isn't auto-executed
+## Repo layout
 
-Under the session's auto mode I avoided running `add-reviewer.sh` on the real `~/.openclaw/openclaw.json` because:
-- It mutates shared production config affecting live Telegram / WeCom memoirist bindings
-- It restarts the gateway (briefly drops inbound messages)
-- It requires a real Lark open_id of a briefer you intend to test with
+```
+review-agent/
+├── install.sh                  # one-shot installer
+├── install/                    # bootstrap + prereq check + config patchers
+│   ├── bootstrap.sh            # system-dep installer (apt/dnf/brew/apk/pacman)
+│   ├── check_prereqs.sh        # env validation with OS-specific hints
+│   ├── patch_hermes_config.py  # display.platforms.feishu = MINIMAL
+│   ├── patch_memory_sop.py     # prepend SOP to MEMORY.md (idempotent)
+│   └── orchestrator_sop.md     # the SOP block (single source of truth)
+├── skill/                      # the hermes skill
+│   ├── SKILL.md                # skill manifest
+│   ├── references/             # persona / four_pillars / schema / templates
+│   └── scripts/                # ~30 scripts covering the full pipeline
+├── design/                     # architecture + flow design docs
+├── publish/                    # LESSONS / NOTES for skill authors
+├── research/                   # methodology landscape survey
+├── test_logs/                  # test plans
+├── CHANGELOG.md
+├── INSTALL.md                  # full install walkthrough
+├── OPEN_ISSUES.md              # deferred architectural problems
+└── LICENSE                     # MIT
+```
 
-You run that step when you pick a test briefer. See `test_logs/test-plan.md` for the exact commands.
+## Framework references
 
-## Key design decisions (the ten gaps, all resolved)
+- [CSW — Completed Staff Work (1942)](https://en.wikipedia.org/wiki/Completed_staff_work) — quality bar
+- BLUF — "bottom line up front" — military briefing format
+- Amazon 6-pager — narrative-brief discipline
+- Devil's advocate / red team — multi-agent critique pattern
+- [Agent Skills open standard](https://agentskills.io) — skill packaging (agentskills.io-compatible)
 
-| G# | Decision |
-|---|---|
-| G1 | Mid-flight = pull-only dashboard; close = push to both boss and briefer |
-| G2 | Dissent transparent: rejected findings enter `dissent.md` + boss summary with briefer's reason. Annotation format: sidecar JSONL by default, emitted conversation-driven (one at a time); `annotation_mode` in boss_profile allows Lark-doc override (v1) |
-| G3 | Close on (a) mutual ready+confirm OR (b) briefer force-close with logged reason |
-| G4 | Reviewer stores final material + delivers to boss-configured targets |
-| G5 | Per-subtask isolation (session folder with frozen profile/rules) |
-| G6 | Cross-session contamination forbidden; agent loads only current session folder |
-| G7 | Lark (feishu) first, via openclaw websocket + Lark Open API |
-| G8 | Delivery-targets backends: v0 = lark_dm + local_path + email_smtp; v1 = lark_doc + gdrive |
-| G9 | End-to-end on Lark (no CLI mock shortcut) |
-| G10 | v0 = single boss; v1 = multi-boss matrix |
+## Philosophy
 
-## If you want to hand this off to another engineer
+Most 2026 pre-meeting AI tools go **bottom-up** (give the receiver a pre-read). review-agent goes **top-down**: trains the briefer to meet the receiver's bar *before* the meeting is even on the calendar. The 60-second summary the receiver reads is the tip; the rigor happened one layer down.
 
-Start at `design/framework_v1.md`, then `skill/SKILL.md`, then `skill/references/template/AGENTS.md`. The third file is the reviewer's persona prompt — any behavior change starts there.
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+## Contributing
+
+Issues / PRs welcome. Substantial changes should first be discussed via an issue; the project follows the architectural constraints in `design/`.
+
+Known open issues: [OPEN_ISSUES.md](OPEN_ISSUES.md).

@@ -100,11 +100,11 @@ mental model 上 Orchestrator 看起来像独立 agent，但在 hermes 架构里
 4. 在 `~/.hermes/memories/MEMORY.md` 加一条"Lark DM 路由规则"，把上面的决策树写成给 main agent 看的 SOP
 5. `SKILL.md` 加一段说明主 agent 可以直接 invoke 本 skill，也可以通过显式命令触发
 6. 测试：
-   - Evie 发"bot 在吗" → normal 回复
-   - Evie 发"/review start Tavily 选型" → 启 new session
-   - Evie 在 active session 里发"好的 按你说的改" → review-agent 接
-   - Evie 发"结束" → close 确认流程
-   - Evie 在 session 里突然发"顺便问今天天气" → 主 agent 反问"是 review 内容还是切回普通聊天"
+   - Requester A 发"bot 在吗" → normal 回复
+   - Requester A 发"/review start Tavily 选型" → 启 new session
+   - Requester A 在 active session 里发"好的 按你说的改" → review-agent 接
+   - Requester A 发"结束" → close 确认流程
+   - Requester A 在 session 里突然发"顺便问今天天气" → 主 agent 反问"是 review 内容还是切回普通聊天"
 
 ## 和 context B'（群 @ 触发）的兼容
 
