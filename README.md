@@ -43,6 +43,16 @@ review_agent_development/
 - [x] Step 3.10: Local web dashboard (`dashboard-server.py` / `dashboard-web.sh`) at http://127.0.0.1:8765
 - [x] Step 4: Publish artifacts (README, lessons, skill-author notes)
 
+## Install on a new hermes
+
+```bash
+gh repo clone jimmyag2026-prog/review-agent ~/code/review-agent
+cd ~/code/review-agent && bash install.sh
+hermes gateway restart
+```
+
+See [`INSTALL.md`](INSTALL.md) for prerequisites, verify steps, and troubleshooting.
+
 ## Open issues (deferred)
 
 See [`OPEN_ISSUES.md`](OPEN_ISSUES.md) for deferred architectural problems.
