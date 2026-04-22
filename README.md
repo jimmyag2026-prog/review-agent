@@ -45,13 +45,28 @@ review_agent_development/
 
 ## Install on a new hermes
 
+**Pre-configured machine** (has hermes + creds):
+
 ```bash
 gh repo clone jimmyag2026-prog/review-agent ~/code/review-agent
 cd ~/code/review-agent && bash install.sh
 hermes gateway restart
 ```
 
-See [`INSTALL.md`](INSTALL.md) for prerequisites, verify steps, and troubleshooting.
+**From scratch / bare VPS** (Ubuntu, Debian, Fedora, Arch, Alpine, macOS):
+
+```bash
+# 1. system deps (auto-detect OS)
+git clone https://github.com/jimmyag2026-prog/review-agent.git ~/code/review-agent
+cd ~/code/review-agent
+bash install/bootstrap.sh
+
+# 2. then install hermes, configure ~/.hermes/.env with Lark + OpenRouter creds
+# 3. finally:
+bash install.sh
+```
+
+See [`INSTALL.md`](INSTALL.md) for the full walkthrough, including prerequisites, OS package list, repo-access without `gh`, verify steps, and troubleshooting.
 
 ## Open issues (deferred)
 
