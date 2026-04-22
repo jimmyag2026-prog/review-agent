@@ -73,6 +73,15 @@ python3 "$SKILL_DIR/scripts/scan.py" "$SDIR" >/dev/null 2>&1 \
   && echo "[confirm-and-scan] scan_completed" >&2 \
   || { echo "[confirm-and-scan] scan_failed" >&2; exit 3; }
 
+# Publish material + findings as Lark doc with anchored comments (runs silently;
+# doc URL written into session meta for downstream use)
+DOC_URL=$(python3 "$SKILL_DIR/scripts/lark-doc-publish.py" "$SDIR" 2>/dev/null || true)
+if [ -n "$DOC_URL" ]; then
+  echo "[confirm-and-scan] lark_doc_published url=$DOC_URL" >&2
+else
+  echo "[confirm-and-scan] lark_doc_publish_failed_continuing_im_only" >&2
+fi
+
 # Auto-scope: pick top 3 (BLOCKER first, then IMPROVEMENT, then NICE), defer rest.
 # Transition directly to qa_active and emit first finding.
 python3 <<'PYEOF'
@@ -82,7 +91,7 @@ sd = "$SDIR"
 sd = os.environ.get("SDIR_REAL", sd)
 PYEOF
 
-SDIR_REAL="$SDIR" python3 <<PYEOF
+SDIR_REAL="$SDIR" DOC_URL_FOR_MSG="$DOC_URL" python3 <<PYEOF
 import json, os, sys
 sd = os.environ["SDIR_REAL"]
 anns_path = os.path.join(sd, "annotations.jsonl")
@@ -156,7 +165,12 @@ options = """
 (p) pass · 跳过这条
 (custom) 其他——直接打字"""
 
-preamble = f"扫完了，共挑出 **{total} 条** 问题（🚩 {n_b} BLOCKER · ⚠ {n_i} IMPROVEMENT · • {n_n} NICE）。我先带你过最关键的 **{K} 条**" + (f"——剩下 {remaining} 条等这 {K} 条走完后，如果你还有时间，我们可以继续讨论。" if remaining > 0 else "。") + "\n\n一条条来：\n"
+doc_url_line = ""
+doc_url_env = os.environ.get("DOC_URL_FOR_MSG", "")
+if doc_url_env:
+    doc_url_line = f"\n📎 你的材料 + 所有 {total} 条批注我也同步到了 Lark 文档：{doc_url_env}\n你可以在文档里直接看批注原文；我们在这边 DM 里一条条过关键的。\n"
+
+preamble = f"扫完了，共挑出 **{total} 条** 问题（🚩 {n_b} BLOCKER · ⚠ {n_i} IMPROVEMENT · • {n_n} NICE）。我先带你过最关键的 **{K} 条**" + (f"——剩下 {remaining} 条等这 {K} 条走完后，如果你还有时间，我们可以继续讨论。" if remaining > 0 else "。") + doc_url_line + "\n一条条来：\n"
 
 src_tag = "（Responder 视角模拟的追问）" if is_sim else ""
 
