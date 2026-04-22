@@ -197,6 +197,10 @@ CSS = """
   .tabs a { display: inline-block; padding: 6px 12px; color: #666; border-bottom: 2px solid transparent;
             margin-right: 4px; font-size: 13px; }
   .tabs a.on { color: #1a1a2e; border-bottom-color: #1a1a2e; }
+  .update-banner { margin: 8px 16px 0; padding: 8px 12px; border-radius: 4px;
+                   background: #fff7e6; border: 1px solid #ffd591; color: #874d00;
+                   font-size: 13px; }
+  .update-banner a { color: #874d00; text-decoration: underline; }
 </style>
 """
 
@@ -206,7 +210,49 @@ def html_escape(s):
                    .replace('"', "&quot;"))
 
 
+def _update_banner_html():
+    """Returns a small HTML banner if an update is available, else ''.
+    Reads ~/.review-agent/.update-check.json — never hits the network from
+    the web handler (that runs in a request thread). A background refresh
+    is triggered on miss, but the current page shows no banner until the
+    next hit."""
+    import subprocess, threading
+    cache = ROOT / ".update-check.json"
+    try:
+        if cache.exists():
+            d = json.loads(cache.read_text())
+            local, remote = d.get("local"), d.get("remote_tag")
+            if local and remote:
+                from re import match as _m
+                def _t(v):
+                    v = (v or "").lstrip("v")
+                    mm = _m(r"^(\d+)\.(\d+)(?:\.(\d+))?", v)
+                    return tuple(int(x or 0) for x in mm.groups()) if mm else (0, 0, 0)
+                if _t(remote) > _t(local):
+                    url = html_escape(d.get("remote_url", ""))
+                    return (f'<div class="update-banner">'
+                            f'📦 update available: <b>{html_escape(remote)}</b> '
+                            f'(you have {html_escape(local)}) — '
+                            f'<a href="{url}" target="_blank">release notes</a>'
+                            f'</div>')
+    except Exception:
+        pass
+
+    # Trigger a background refresh if the cache is missing or old. Non-blocking.
+    def _bg_refresh():
+        try:
+            subprocess.run(
+                ["python3", str(Path(__file__).parent / "check-updates.py"), "--json"],
+                capture_output=True, timeout=10,
+            )
+        except Exception:
+            pass
+    threading.Thread(target=_bg_refresh, daemon=True).start()
+    return ""
+
+
 def render_page(title, body, refresh=30):
+    banner = _update_banner_html()
     return f"""<!DOCTYPE html>
 <html lang="zh"><head><meta charset="utf-8"><title>{html_escape(title)}</title>
 <meta http-equiv="refresh" content="{refresh}">
@@ -217,6 +263,7 @@ def render_page(title, body, refresh=30):
 <span class="subtle">{html_escape(str(ROOT))}</span>
 <span class="meta">auto-refresh {refresh}s · {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</span>
 </header>
+{banner}
 <main>{body}</main>
 </body></html>"""
 

@@ -8,4 +8,13 @@
 set -euo pipefail
 
 SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+
+# Admin-facing update notice. Silent on up-to-date / disabled / offline.
+# 6s timeout is plenty — urllib already caps at 5s and caches for 24h.
+UPDATE_LINE=$(timeout 6 python3 "$SKILL_DIR/scripts/check-updates.py" --oneline 2>/dev/null || true)
+if [ -n "$UPDATE_LINE" ]; then
+  echo "[review-agent] $UPDATE_LINE"
+  echo
+fi
+
 exec python3 "$SKILL_DIR/scripts/dashboard-server.py" "$@"
