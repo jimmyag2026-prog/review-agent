@@ -53,6 +53,8 @@ bash install.sh
 
 See [**INSTALL.md**](INSTALL.md) for the full walkthrough: prerequisites, OS package lists, repo-access options (gh / SSH / PAT), verify steps, troubleshooting, uninstall.
 
+**Running on a VPS?** See [**docs/VPS_SETUP.md**](docs/VPS_SETUP.md) — systemd service, SSH-tunneled dashboard, log rotation, backup, security hardening.
+
 ## Architecture
 
 ```

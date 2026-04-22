@@ -39,6 +39,8 @@ bash install.sh --admin-open-id ou_xxxxxxxx --admin-name "Your Name"
 
 Fresh VPS / bare metal / new Mac. Ordered steps.
 
+> **Running on a remote Linux VPS?** See [docs/VPS_SETUP.md](docs/VPS_SETUP.md) for VPS-specific patterns: systemd service (vs launchd on Mac), SSH-tunneled dashboard access, `loginctl enable-linger` for services to survive SSH disconnects, log rotation, backup strategy.
+
 ### Step A — System packages (2 min)
 
 **Bootstrap script** (auto-detects OS, installs all deps):
