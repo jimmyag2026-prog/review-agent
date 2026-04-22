@@ -16,22 +16,41 @@ Two paths:
 
 For environments that already have hermes running with Lark channel configured.
 
+The installer is split in two phases so you can copy files now and wire things up later:
+
+- **Phase A — Install**: prereq check + copy skill files to `~/.hermes/skills/productivity/review-agent/`. Reversible; does not change main-agent behavior.
+- **Phase B — Enable**: configure Admin + Responder, patch `~/.hermes/config.yaml`, install the routing SOP into `MEMORY.md`. After this the main agent begins routing Lark DMs through review-agent.
+
 ```bash
 # 1. clone
 gh repo clone jimmyag2026-prog/review-agent ~/code/review-agent
 
-# 2. run installer (interactive — prompts for your Lark open_id)
+# 2. run installer — copies files, then prompts "Enable review-agent now? [y/N]"
 cd ~/code/review-agent && bash install.sh
 
-# 3. apply config
+# 3. apply config (after Phase B has run)
 hermes gateway restart
 ```
 
-Non-interactive:
+**If you answered N to the enable prompt** (or want to defer activation), the skill files are in place but dormant. When ready:
+
+```bash
+bash install.sh --enable-only
+```
+
+**Install files only, skip the prompt entirely:**
+
+```bash
+bash install.sh --install-only
+```
+
+**Non-interactive (install + enable in one shot):**
 
 ```bash
 bash install.sh --admin-open-id ou_xxxxxxxx --admin-name "Your Name"
 ```
+
+Passing `--admin-open-id` implies Phase B will run non-interactively.
 
 ---
 
@@ -140,16 +159,27 @@ Total time from fresh VPS: ~15 minutes.
 
 ## What `install.sh` does
 
-Idempotent — safe to re-run.
+Idempotent — safe to re-run. Two phases:
+
+**Phase A — Install files** (always runs; reversible):
 
 | Step | Action | Idempotent? |
 |---|---|---|
-| 1 | `check_prereqs.sh` — blocks if hermes/python/creds missing | ✓ read-only |
-| 2 | `rsync skill/` → `~/.hermes/skills/productivity/review-agent/` | ✓ overwrites |
-| 3 | Patch `~/.hermes/config.yaml` (feishu display tier, kill interim msgs) | ✓ no-op if correct |
-| 4 | Prepend orchestrator SOP to `~/.hermes/memories/MEMORY.md` | ✓ marker-guarded |
-| 5 | Initialize `~/.review-agent/` with Admin open_id | ✓ skipped if exists |
-| 6 | Print next steps | — |
+| A1 | `check_prereqs.sh` — blocks if hermes/python/creds missing | ✓ read-only |
+| A2 | `rsync skill/` → `~/.hermes/skills/productivity/review-agent/` | ✓ overwrites |
+
+After Phase A, files are on disk but the main agent does nothing new. Safe to stop here.
+
+**Phase B — Enable** (opt-in via prompt or `--enable-only`; activates routing):
+
+| Step | Action | Idempotent? |
+|---|---|---|
+| B1 | Configure Admin + Responder — `setup.sh` writes `~/.review-agent/users/...` | ✓ skipped if exists (use `--force` on setup.sh to overwrite) |
+| B2 | Patch `~/.hermes/config.yaml` (feishu display tier, kill interim msgs) | ✓ no-op if correct |
+| B3 | Prepend orchestrator SOP to `~/.hermes/memories/MEMORY.md` | ✓ marker-guarded |
+| B4 | Write `~/.review-agent/enabled.json` stamp | ✓ overwrites |
+
+After Phase B, restart hermes gateway and the main agent starts routing Lark DMs through review-agent.
 
 Backups of `config.yaml` and `MEMORY.md` saved as `.bak.review-agent-<timestamp>` before write.
 
@@ -203,13 +233,16 @@ They DM the Lark bot with a draft / doc link / proposal. hermes routes based on 
 ## Verify install
 
 ```bash
-# Skill registered
+# Phase A — files installed
 hermes skills list --source local | grep review-agent
 
-# SOP installed
+# Phase B — enabled?
+test -f ~/.review-agent/enabled.json && echo ENABLED || echo "not yet enabled — run: bash install.sh --enable-only"
+
+# SOP installed (part of Phase B)
 grep -c 'review-agent:orchestrator-sop' ~/.hermes/memories/MEMORY.md   # → 1 or 2
 
-# Config patched
+# Config patched (part of Phase B)
 python3 -c "import yaml; cfg = yaml.safe_load(open('$HOME/.hermes/config.yaml'));
 print('interim:', cfg['display']['interim_assistant_messages']);
 print('feishu:', cfg['display']['platforms']['feishu'])"
