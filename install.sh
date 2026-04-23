@@ -111,9 +111,10 @@ phase_enable() {
   fi
 
   banner "Phase B · Configure Admin + Responder"
-  echo "review-agent needs at least one Admin + one Responder before it can run."
-  echo "(Admin = you, the person who runs the agent. Responder = the person whose"
-  echo " review standards are applied. Default: same Lark account plays both roles.)"
+  echo "Default: you are both the Admin and the Responder — this is the common case."
+  echo "(Admin = runs the agent. Responder = whose review standards are applied.)"
+  echo "Override only if you want a different account to be the Responder — pass"
+  echo "  --responder-open-id ou_xxx  on the install.sh command line."
   echo
 
   if [ -z "$ADMIN_OID" ]; then
@@ -121,23 +122,21 @@ phase_enable() {
     echo
     hermes pairing list 2>&1 | grep feishu || echo "  (no feishu pairings yet — DM your bot once first)"
     echo
-    read -rp "Admin Lark open_id (starts with 'ou_'): " ADMIN_OID
+    read -rp "Your Lark open_id (starts with 'ou_'): " ADMIN_OID
   fi
 
   if [ -z "$ADMIN_OID" ] || [[ ! "$ADMIN_OID" =~ ^ou_ ]]; then
-    echo -e "${RED}error:${NC} Admin open_id required, must start with 'ou_'"
+    echo -e "${RED}error:${NC} open_id required, must start with 'ou_'"
     exit 3
   fi
 
-  [ -z "$ADMIN_NAME" ] && read -rp "Admin display name (leave blank for '$USER'): " ADMIN_NAME
+  [ -z "$ADMIN_NAME" ] && read -rp "Display name (leave blank for '$USER'): " ADMIN_NAME
   [ -z "$ADMIN_NAME" ] && ADMIN_NAME="$USER"
 
-  if [ -z "$RESPONDER_OID" ]; then
-    echo
-    read -rp "Responder Lark open_id (blank = same as Admin): " RESPONDER_OID
-  fi
+  # Responder defaults to same as Admin unless explicitly overridden on CLI.
+  # (The Responder-split flow is advanced and almost never needed for v0.)
   if [ -n "$RESPONDER_OID" ] && [[ ! "$RESPONDER_OID" =~ ^ou_ ]]; then
-    echo -e "${RED}error:${NC} Responder open_id must start with 'ou_' (or leave blank)"
+    echo -e "${RED}error:${NC} --responder-open-id must start with 'ou_'"
     exit 3
   fi
   if [ -n "$RESPONDER_OID" ] && [ -z "$RESPONDER_NAME" ]; then
@@ -293,7 +292,39 @@ case "$MODE" in
     if [ -n "$ADMIN_OID" ]; then
       phase_enable
     else
-      echo
+      cat <<EOF
+
+${BLUE}━━━ About review-agent ━━━${NC}
+
+Review-agent is a CSW-style (1942 Completed Staff Work) pre-meeting coach for
+Lark. Your subordinates (Requesters) DM the bot their drafts; the agent runs a
+four-pillar review (Background / Materials / Framework / Intent) + a simulation
+of how you'd react, then walks them through a Q&A loop until the brief is
+"signing-ready". You get a 6-section summary when each session closes.
+
+${YELLOW}Three roles${NC} (one person can hold multiple):
+  • ${BLUE}Admin${NC}     — manages users, edits global config (you, by default)
+  • ${BLUE}Responder${NC} — whose review standards are applied (you, by default)
+  • ${BLUE}Requester${NC} — submits drafts to be reviewed (subordinates; added later)
+
+${YELLOW}Requester commands${NC} (typed in Lark DM):
+  /review start <主题>   开启 review
+  /review end <理由>     结束当前 session（给出理由，写进 summary）
+  /review status         查看当前 session 进度
+  /review help           看命令列表
+  (普通聊天直接说话即可；发文档/附件会自动启 review 流程)
+
+${YELLOW}Typical flow${NC}:
+  1. You personalize your Responder profile (pet peeves, decision style, time budget)
+  2. You enroll your subordinates as Requesters (add-requester.sh)
+  3. Each Requester DMs the bot with a draft → agent runs Q&A loop → delivers summary
+  4. You review the summary in Lark DM or via the local dashboard (127.0.0.1:8765)
+
+Docs: https://github.com/jimmyag2026-prog/review-agent
+
+${BLUE}━━━${NC}
+
+EOF
       read -rp "Enable review-agent now? This will configure Admin/Responder, patch ~/.hermes/config.yaml, and install the routing SOP into MEMORY.md. [y/N] " ENABLE_NOW
       case "${ENABLE_NOW:-N}" in
         y|Y|yes|YES)
