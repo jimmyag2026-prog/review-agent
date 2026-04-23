@@ -9,7 +9,7 @@ fresh hermes+Lark user to hit silent degradation or post-install busywork.
 
 ### Fixed
 
-- **`SKILL.md` version + author**: was `version: 0.2.0` (stale) and `author: jimmy` (personal info). Bumped to `1.1.1` and removed author field.
+- **`SKILL.md` version + author**: was `version: 0.2.0` (stale) and had a personal `author:` field. Bumped to `1.1.1` and removed the author field.
 - **PDF / image / audio hard-fail**: `ingest.py` used to return a placeholder string `"[PDF ingest unavailable …]"` when `pdftotext`/`pdfminer.six` were both missing, and `scan.py` would then run the full four-pillar review on that placeholder text — producing confident-looking but garbage findings. Now raises a structured `IngestError`, writes `ingest_failed.json`, and exits 3 with a clear Requester-facing message ("让 Admin 装一下 / 你直接贴正文也行"). Same pattern for `tesseract` (OCR) and `whisper` (audio).
 - **`start-review.sh` propagates ingest failure**: was swallowing the exit code (`>/dev/null 2>&1 || echo fallback`). Now detects exit 3, relays the user message to Lark, marks session `status: ingest_failed`, clears `active_session.json`, and skips `confirm-topic`/scan entirely.
 - **`check_prereqs.sh` escalated PDF tools to blocker**: was a warning. Since SOP v2 routes any PDF straight to ingest and ingest now hard-fails, missing PDF tools would be a first-review crash. Now blocks install unless `pdftotext` OR `pdfminer.six` is available. `tesseract` and `whisper` remain warnings (Requester gets a "paste text" prompt instead of a hard fail for images/audio).
