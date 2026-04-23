@@ -7,7 +7,7 @@ and produces sessions/<id>/normalized.md as the canonical text for review.
 Supported:
   - .md / .txt / .markdown → copy as-is
   - .pdf → pdftotext (if available) / python pdfminer (fallback)
-  - .png / .jpg / .jpeg / .webp → OCR (tesseract if available; else skip+warn)
+  - .png / .jpg / .jpeg / .webp → OCR (tesseract if available)
   - .wav / .mp3 / .m4a / .ogg / .flac → whisper transcription
   - Lark / Feishu doc or wiki URL in a .url or .txt file → lark-fetch
   - Google Docs URL → gdrive CLI (if available)
@@ -15,6 +15,16 @@ Supported:
   - unknown → warn + skip
 
 Also scans input/*.txt files for URLs and fetches those inline.
+
+Exit codes:
+  0 — all artifacts ingested cleanly
+  2 — bad invocation (e.g. session dir missing)
+  3 — at least one attachment required a tool we couldn't find, and no
+      usable text was produced. Writes ingest_failed.json with a
+      Lark-ready, Requester-facing message the orchestrator can relay.
+      This is the v1.1.1 hard-fail — previous behavior silently returned
+      a placeholder "[PDF ingest unavailable …]" and let scan.py run on
+      nonsense.
 
 Usage:
   ingest.py <session_dir> [--force]
@@ -28,6 +38,16 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+
+
+class IngestError(Exception):
+    """Raised when an attachment requires a tool that isn't installed.
+    The .user_message field is a short, non-technical string that can be
+    shown to the Requester in Lark (no stack traces, no file paths)."""
+    def __init__(self, user_message: str, detail: str = ""):
+        super().__init__(user_message)
+        self.user_message = user_message
+        self.detail = detail
 
 
 def which(cmd):
@@ -50,23 +70,44 @@ def extract_pdf(path: Path) -> str:
     if which("pdftotext"):
         r = subprocess.run(["pdftotext", "-layout", str(path), "-"],
                           capture_output=True, text=True, timeout=60)
-        if r.returncode == 0:
+        if r.returncode == 0 and r.stdout.strip():
             return r.stdout
-    # Fallback to pdfminer.six if installed
     try:
         from pdfminer.high_level import extract_text
-        return extract_text(str(path))
+        txt = extract_text(str(path))
+        if txt and txt.strip():
+            return txt
     except ImportError:
-        return f"[PDF ingest unavailable — install pdftotext or pdfminer.six; file saved as {path.name}]"
+        pass
+    raise IngestError(
+        user_message=(
+            f"我这边没法提取 PDF（{path.name}）的文字内容——server 上既没装 "
+            f"`pdftotext` 也没装 `pdfminer.six`。\n"
+            f"两个办法:\n"
+            f"  1. 让 Admin 在 server 上装一下（macOS: `brew install poppler`；"
+            f"Linux: `sudo apt install poppler-utils` 或 `pip3 install pdfminer.six`）\n"
+            f"  2. 你直接把 PDF 的正文贴在 Lark 消息里，我一样能 review。"
+        ),
+        detail=f"pdftotext={bool(which('pdftotext'))} pdfminer.six=missing; file={path.name}",
+    )
 
 
 def extract_image(path: Path) -> str:
     if which("tesseract"):
         r = subprocess.run(["tesseract", str(path), "-", "-l", "chi_sim+eng"],
                           capture_output=True, text=True, timeout=60)
-        if r.returncode == 0:
+        if r.returncode == 0 and r.stdout.strip():
             return r.stdout
-    return f"[OCR unavailable — install tesseract; image saved as {path.name}. Please paste text if needed.]"
+    raise IngestError(
+        user_message=(
+            f"我这边没法 OCR 图片（{path.name}）——server 上没装 `tesseract`。\n"
+            f"两个办法:\n"
+            f"  1. 让 Admin 装一下（macOS: `brew install tesseract tesseract-lang`；"
+            f"Linux: `sudo apt install tesseract-ocr tesseract-ocr-chi-sim`）\n"
+            f"  2. 你直接把图片里的文字打出来发给我，我一样能 review。"
+        ),
+        detail=f"tesseract=missing; file={path.name}",
+    )
 
 
 def extract_audio(path: Path) -> str:
@@ -80,11 +121,24 @@ def extract_audio(path: Path) -> str:
                 capture_output=True, text=True, timeout=600
             )
             txt_file = out_dir / (path.stem + ".txt")
-            if txt_file.exists():
+            if txt_file.exists() and txt_file.read_text().strip():
                 return txt_file.read_text()
         except Exception as e:
-            return f"[whisper failed: {e}]"
-    return f"[audio ingest unavailable — install whisper; file: {path.name}]"
+            raise IngestError(
+                user_message=(
+                    f"语音转文字时出错（{path.name}）。你把关键点打出来发我就行。"
+                ),
+                detail=f"whisper-run-failed: {e}; file={path.name}",
+            )
+    raise IngestError(
+        user_message=(
+            f"我这边没法转写语音（{path.name}）——server 上没装 `whisper`。\n"
+            f"两个办法:\n"
+            f"  1. 让 Admin 装一下（`pip3 install openai-whisper`，macOS 先 `brew install ffmpeg`）\n"
+            f"  2. 你把关键点打出来发我，我一样能 review。"
+        ),
+        detail=f"whisper=missing; file={path.name}",
+    )
 
 
 LARK_URL_RE = re.compile(
@@ -97,7 +151,6 @@ GDOCS_URL_RE = re.compile(
 
 
 def fetch_lark(url: str, session_dir: Path) -> str:
-    """Fetch Lark doc/wiki via Open API using hermes .env creds."""
     script = Path(__file__).parent / "lark-fetch.sh"
     if not script.exists():
         return f"[lark-fetch.sh not found; URL saved: {url}]"
@@ -114,7 +167,6 @@ def fetch_gdocs(url: str) -> str:
     gdrive = Path.home() / "bin" / "gdrive"
     if not gdrive.exists():
         return f"[~/bin/gdrive not installed; URL: {url}]"
-    # Extract doc id from URL
     m = re.search(r'/d/([a-zA-Z0-9_-]+)', url)
     if not m:
         return f"[could not extract doc id from {url}]"
@@ -130,13 +182,13 @@ def fetch_gdocs(url: str) -> str:
 
 
 def process_artifact(path: Path, session_dir: Path) -> str:
-    """Return markdown text extracted from this artifact."""
+    """Return markdown text extracted from this artifact.
+    Raises IngestError if a required tool is missing."""
     ext = path.suffix.lower()
     header = f"\n## Input: `{path.name}` ({ext or 'no ext'})\n\n"
 
     if ext in (".md", ".markdown", ".txt"):
         text = read_text(path)
-        # Also expand any URLs inside the text
         urls_lark = LARK_URL_RE.findall(text)
         urls_gdocs = GDOCS_URL_RE.findall(text)
         expansions = []
@@ -192,24 +244,76 @@ def main():
     normalized = sd / "normalized.md"
 
     if normalized.exists() and not args.force:
-        print(f"normalized.md exists; use --force to re-ingest", file=sys.stderr)
+        print("normalized.md exists; use --force to re-ingest", file=sys.stderr)
         return
 
     if not input_dir.exists() or not any(input_dir.iterdir()):
         print(f"warn: no files in {input_dir}", file=sys.stderr)
         return
 
-    parts = []
-    parts.append(f"# Normalized input — {sd.name}\n")
-    parts.append(f"_Ingested at {datetime.now().astimezone().isoformat(timespec='seconds')}_\n")
+    parts = [
+        f"# Normalized input — {sd.name}\n",
+        f"_Ingested at {datetime.now().astimezone().isoformat(timespec='seconds')}_\n",
+    ]
+    errors = []
 
     for p in sorted(input_dir.iterdir()):
         if not p.is_file() or p.name.startswith("."):
             continue
-        parts.append(process_artifact(p, sd))
+        try:
+            parts.append(process_artifact(p, sd))
+        except IngestError as e:
+            log(sd, f"ingest error on {p.name}: {e.detail}")
+            errors.append({
+                "file": p.name,
+                "user_message": e.user_message,
+                "detail": e.detail,
+            })
+
+    # If every attachment failed and the only text we got is the header,
+    # hard-fail: write ingest_failed.json and exit 3.
+    real_body = "".join(parts[2:]).strip()
+    if errors and not real_body:
+        failure = {
+            "failed_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+            "errors": errors,
+            # First error's user_message is what the orchestrator should send
+            # to the Requester. Collapse multiple to one if they all share
+            # the same root cause.
+            "lark_message": _compose_lark_message(errors),
+        }
+        (sd / "ingest_failed.json").write_text(
+            json.dumps(failure, indent=2, ensure_ascii=False)
+        )
+        # Still write a skeleton normalized.md so downstream readers don't
+        # crash, but mark it clearly.
+        normalized.write_text(
+            "# Normalized input — INGEST FAILED\n\n"
+            + failure["lark_message"] + "\n"
+        )
+        print(failure["lark_message"])
+        sys.exit(3)
+
+    # Soft-fail: some artifacts failed but at least one succeeded. Append the
+    # error messages to the normalized text so the Requester sees them during
+    # confirm-topic too.
+    if errors:
+        parts.append("\n\n## ⚠️ 部分附件没法处理\n\n")
+        for e in errors:
+            parts.append(f"- **{e['file']}**: {e['user_message']}\n")
 
     normalized.write_text("\n".join(parts))
     print(f"wrote {normalized}")
+
+
+def _compose_lark_message(errors):
+    """Collapse multiple errors into one Lark-ready message."""
+    if len(errors) == 1:
+        return errors[0]["user_message"]
+    lines = ["我这边处理不了你发的附件，具体:\n"]
+    for e in errors:
+        lines.append(f"- **{e['file']}**: {e['user_message']}")
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":

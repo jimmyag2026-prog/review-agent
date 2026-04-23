@@ -2,6 +2,26 @@
 
 All notable changes to review-agent are tracked here. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.1.1] — 2026-04-23
+
+Patch release from a one-click-install audit. Closes gaps that would cause a
+fresh hermes+Lark user to hit silent degradation or post-install busywork.
+
+### Fixed
+
+- **`SKILL.md` version + author**: was `version: 0.2.0` (stale) and `author: jimmy` (personal info). Bumped to `1.1.1` and removed author field.
+- **PDF / image / audio hard-fail**: `ingest.py` used to return a placeholder string `"[PDF ingest unavailable …]"` when `pdftotext`/`pdfminer.six` were both missing, and `scan.py` would then run the full four-pillar review on that placeholder text — producing confident-looking but garbage findings. Now raises a structured `IngestError`, writes `ingest_failed.json`, and exits 3 with a clear Requester-facing message ("让 Admin 装一下 / 你直接贴正文也行"). Same pattern for `tesseract` (OCR) and `whisper` (audio).
+- **`start-review.sh` propagates ingest failure**: was swallowing the exit code (`>/dev/null 2>&1 || echo fallback`). Now detects exit 3, relays the user message to Lark, marks session `status: ingest_failed`, clears `active_session.json`, and skips `confirm-topic`/scan entirely.
+- **`check_prereqs.sh` escalated PDF tools to blocker**: was a warning. Since SOP v2 routes any PDF straight to ingest and ingest now hard-fails, missing PDF tools would be a first-review crash. Now blocks install unless `pdftotext` OR `pdfminer.six` is available. `tesseract` and `whisper` remain warnings (Requester gets a "paste text" prompt instead of a hard fail for images/audio).
+
+### Added
+
+- **Post-install interactive prompts** in `install.sh` Phase B:
+  1. "Restart hermes gateway now? [Y/n]" — runs `hermes gateway restart` or the `systemctl --user restart hermes-gateway` equivalent on Linux.
+  2. "Add your first Requester now? [y/N]" — interactive wizard that calls `add-requester.sh --approve-pairing` with the given open_id + name.
+  Both prompts are skipped when `--admin-open-id` is passed on the CLI (implied non-interactive mode).
+- **`install/check_lark_scopes.py`** — queries Lark Open API with `FEISHU_APP_ID`/`SECRET` from `~/.hermes/.env`, probes each required scope (`im:message`, `im:message:send_as_bot`, `docx:document`, `drive:file`, `drive:drive`) and reports per-scope PRESENT/MISSING/UNKNOWN. Non-blocking — granting scopes is a human step in the Lark developer console. Wired into `install.sh` Phase B.
+
 ## [1.1.0] — 2026-04-22
 
 ### Changed

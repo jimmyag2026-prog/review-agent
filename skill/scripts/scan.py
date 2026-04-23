@@ -113,7 +113,7 @@ FOUR_PILLAR_STAGE_BLOCK = """**你现在在流程的 Step 3 Layer A：FOUR-PILLA
 
 **Pillar 3 (Framework)**：讨论变量和判断类型明确了吗？如果 Requester 想让 Responder 选但没说按什么维度 → IMPROVEMENT；完全开放 → BLOCKER。
 
-**Pillar 2 (Materials)**：Responder 最可能追的 top-3 问题都有答案吗？数据有源+日期吗？内外部锚点齐吗？按 Responder profile 校准阈值（如 Jimmy profile 里"6 个月陈旧 = BLOCKER"）。
+**Pillar 2 (Materials)**：Responder 最可能追的 top-3 问题都有答案吗？数据有源+日期吗？内外部锚点齐吗？按 Responder profile 校准阈值（如 profile 里写"6 个月陈旧 = BLOCKER"，就按这个硬卡）。
 
 **Pillar 1 (Background)**：Responder 能不看背景补齐就进入讨论吗？
 

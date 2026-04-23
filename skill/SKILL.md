@@ -1,8 +1,7 @@
 ---
 name: review-agent
 description: Pre-meeting review coach that helps the boss ("Responder") train subordinates' ("Requester") briefing materials to CSW-grade decision-readiness via async Lark DM. Three-role model (Admin/Responder/Requester). Use when setting up users, or when a registered Requester sends a draft / opens a review subtask. Runtime: hermes (native Lark). Per-subtask isolation via ~/.review-agent/users/<open_id>/sessions/<id>/. Uses four-pillar review (Background/Materials/Framework/Intent) + Responder-simulation top layer for personalized depth. Dissent transparent; closes deliver summary to both Responder and Requester.
-version: 0.2.0
-author: jimmy
+version: 1.1.1
 license: MIT
 argument-hint: "[command] [args]"
 disable-model-invocation: false
@@ -36,7 +35,7 @@ A single user can hold multiple roles (default install: one user with `["Admin",
 
 **B. Requester review context (DM)** — when a registered Requester DMs the bot. You ARE the reviewer. Resolve their `responder_open_id` from their `meta.json`, load that Responder's `profile.md` and the shared `review_rules.md`, route to or create the appropriate subtask session under `users/<requester_open_id>/sessions/<id>/`, then run the seven-axis review protocol.
 
-**B'. Requester review context (group @-mention)** — when the bot is @-mentioned in a Lark group chat AND the message comes from a registered Requester AND the message expresses intent to discuss something with their Responder (e.g., "@bot 我想找 Jimmy 聊一下 Q2 计划 / I want to discuss X with Jimmy / 帮我 review 一下这个 brief 再约 Jimmy"). Behavior:
+**B'. Requester review context (group @-mention)** — when the bot is @-mentioned in a Lark group chat AND the message comes from a registered Requester AND the message expresses intent to discuss something with their Responder (e.g., "@bot 我想找 <Responder> 聊一下 Q2 计划 / I want to discuss X with <Responder> / 帮我 review 一下这个 brief 再约 <Responder>"). Behavior:
    1. Reply briefly in the group: "好，我们先在私聊里把材料 review 完，准备好我会同步到这里 / OK, let's iterate in DM first then sync back."
    2. DM the Requester: "看到你在 <group_name> 提到要找 <responder_name> 讨论 <subject_guess>。把草稿/想法发给我，我们先在这里跑一遍 review。"
    3. Continue the rest of the review in DM (same as context B). Group is the trigger surface only — actual review is private.

@@ -49,6 +49,10 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# Remember whether --admin-open-id came from the CLI (→ non-interactive mode
+# for end-of-Phase-B prompts).
+ORIGINAL_ADMIN_OID="$ADMIN_OID"
+
 GREEN='\033[0;32m'; YELLOW='\033[0;33m'; RED='\033[0;31m'; BLUE='\033[0;34m'; NC='\033[0m'
 
 banner() {
@@ -152,6 +156,10 @@ phase_enable() {
   banner "Phase B · Install orchestrator SOP into MEMORY.md"
   python3 "$SCRIPT_DIR/install/patch_memory_sop.py"
 
+  banner "Phase B · Lark app scope check"
+  # Non-blocking: reports per-scope status. Soft-fail if creds or network miss.
+  python3 "$SCRIPT_DIR/install/check_lark_scopes.py" || true
+
   # Stamp enable state for scripts + uninstall tooling to check
   mkdir -p "$ROOT"
   cat > "$ROOT/enabled.json" <<EOF
@@ -177,33 +185,83 @@ EOF
   fi
 
   banner "Done — review-agent ENABLED"
+
+  # Determine non-interactive mode: if admin was passed on CLI, assume the
+  # caller wants everything to just finish without prompts.
+  NON_INTERACTIVE=0
+  [ -n "${ORIGINAL_ADMIN_OID:-}" ] && NON_INTERACTIVE=1
+
+  # ── Prompt 1: restart hermes gateway ──
+  if [ $SKIP_RESTART -eq 0 ]; then
+    RESTART_CMD=""
+    if [ "$(uname)" = "Darwin" ] && command -v hermes >/dev/null 2>&1; then
+      RESTART_CMD="hermes gateway restart"
+    elif command -v systemctl >/dev/null 2>&1 && systemctl --user is-enabled hermes-gateway >/dev/null 2>&1; then
+      RESTART_CMD="systemctl --user restart hermes-gateway"
+    elif command -v hermes >/dev/null 2>&1; then
+      RESTART_CMD="hermes gateway restart"
+    fi
+
+    if [ -n "$RESTART_CMD" ] && [ $NON_INTERACTIVE -eq 0 ]; then
+      echo
+      read -rp "Restart hermes gateway now (runs: $RESTART_CMD)? [Y/n] " ANS
+      case "${ANS:-Y}" in
+        n|N|no|NO) echo "  skipped. Remember to run '$RESTART_CMD' before the first review." ;;
+        *)
+          echo "  running: $RESTART_CMD"
+          if $RESTART_CMD 2>&1 | tail -3; then
+            echo -e "  ${GREEN}✓${NC} gateway restarted"
+          else
+            echo -e "  ${YELLOW}!${NC} restart reported errors — check with: hermes gateway status"
+          fi
+          ;;
+      esac
+    elif [ -n "$RESTART_CMD" ]; then
+      echo
+      echo "! Don't forget to restart the gateway: $RESTART_CMD"
+    fi
+  fi
+
+  # ── Prompt 2: add first Requester ──
+  if [ $NON_INTERACTIVE -eq 0 ]; then
+    echo
+    read -rp "Add your first Requester now (the person whose drafts you'll review)? [y/N] " ANS
+    case "${ANS:-N}" in
+      y|Y|yes|YES)
+        echo
+        echo "Tip: if the Requester has DM'd your bot, run 'hermes pairing list' in another terminal to see their open_id."
+        read -rp "  Requester Lark open_id (starts with 'ou_'): " REQ_OID
+        if [ -z "$REQ_OID" ] || [[ ! "$REQ_OID" =~ ^ou_ ]]; then
+          echo -e "  ${YELLOW}!${NC} skipping — open_id must start with 'ou_'"
+        else
+          read -rp "  Requester display name: " REQ_NAME
+          REQ_ARGS=("$REQ_OID")
+          [ -n "$REQ_NAME" ] && REQ_ARGS+=(--name "$REQ_NAME")
+          REQ_ARGS+=(--approve-pairing)
+          bash "$SKILL_DST/scripts/add-requester.sh" "${REQ_ARGS[@]}" || true
+        fi
+        ;;
+      *) : ;;
+    esac
+  fi
+
+  # ── Final guidance (always printed) ──
   cat <<EOF
 
-${YELLOW}Recommended next steps:${NC}
+${YELLOW}What's next:${NC}
 
-1. ${BLUE}Edit your Responder profile${NC} (your review standards, pet peeves, etc.):
+1. ${BLUE}Personalize your Responder profile${NC} (10 min of real work — bad defaults = generic reviews):
      vim $ROOT/users/$ADMIN_OID/profile.md
 
 2. ${BLUE}(Optional) Edit agent behavior style${NC}:
      vim $ROOT/admin_style.md
 
-3. ${BLUE}Add your first Requester${NC} (subordinate whose briefings you'll review):
+3. ${BLUE}Add more Requesters${NC} anytime:
      bash $SKILL_DST/scripts/add-requester.sh <requester_ou_xxx> --name "Name"
 
-4. ${BLUE}Open the local dashboard${NC} (watch session progress):
+4. ${BLUE}Watch session progress${NC} in the dashboard:
      bash $SKILL_DST/scripts/dashboard-web.sh --open
 
-EOF
-
-  if [ $SKIP_RESTART -eq 0 ]; then
-    cat <<EOF
-${YELLOW}!${NC}  Restart hermes gateway to apply config changes:
-     hermes gateway restart
-
-EOF
-  fi
-
-  cat <<EOF
 ${BLUE}Reference${NC}: https://github.com/jimmyag2026-prog/review-agent
 
 EOF

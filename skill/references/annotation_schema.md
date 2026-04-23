@@ -49,8 +49,8 @@ One JSON object per line in `sessions/<id>/annotations.jsonl`.
 |---|---|---|
 | **Background** | 背景 / 为什么现在 / 当前状态 / 项目锚点 | "为什么换 Tavily，现在遇到了什么问题" |
 | **Materials** | 数据 / 证据 / 来源 / 定价 / 对比 / 实测 | "准确率的 benchmark 来源是什么" |
-| **Framework** | 讨论变量 / 决策维度 / 判断类型 | "你想让 Jimmy 按 cost 还是 speed 选" |
-| **Intent** | 单一 ask / 具体决策 / Responder 下一步动作 | "你希望 Jimmy 做的决定是批准 Exa 吗" |
+| **Framework** | 讨论变量 / 决策维度 / 判断类型 | "你想让 Responder 按 cost 还是 speed 选" |
+| **Intent** | 单一 ask / 具体决策 / Responder 下一步动作 | "你希望 Responder 做的决定是批准 Exa 吗" |
 
 ## 生成来源（source）
 

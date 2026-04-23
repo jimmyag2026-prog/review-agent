@@ -96,10 +96,47 @@ with open("$SDIR/conversation.jsonl", "a") as f:
     f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 PYEOF
 
-# Step 3: run ingest (suppresses ingest internals; only reports success/failure)
-python3 "$SKILL_DIR/scripts/ingest.py" "$SDIR" --force >/dev/null 2>&1 \
-  && echo "[start-review] ingest_ok" >&2 \
-  || echo "[start-review] ingest_failed_fallback_to_text_paste" >&2
+# Step 3: run ingest. Three outcomes:
+#   exit 0 → everything extracted cleanly, proceed to confirm-topic.
+#   exit 3 → HARD FAIL: attachment needed a tool we don't have, and no
+#            usable text was salvaged. ingest.py wrote ingest_failed.json
+#            with a Requester-facing message and also printed it to stdout.
+#            We relay that to Lark and STOP (don't run scan on garbage).
+#   other  → unexpected ingest failure. Keep legacy fallback (confirm-topic
+#            will still prompt the Requester to paste text).
+set +e
+INGEST_OUTPUT=$(python3 "$SKILL_DIR/scripts/ingest.py" "$SDIR" --force 2>/dev/null)
+INGEST_RC=$?
+set -e
+
+if [ $INGEST_RC -eq 3 ]; then
+  echo "[start-review] ingest_hard_fail_missing_tool" >&2
+  # Relay the user-facing message to Requester if we're sending to Lark.
+  if [ $SEND -eq 1 ]; then
+    bash "$SKILL_DIR/scripts/send-lark.sh" --open-id "$REQ_OID" --text "$INGEST_OUTPUT" >/dev/null 2>&1 \
+      && echo "[start-review] hard_fail_message_sent" >&2 \
+      || echo "[start-review] hard_fail_message_send_failed" >&2
+  else
+    echo "$INGEST_OUTPUT"
+  fi
+  # Mark session as failed rather than active — the Requester needs to retry
+  # with pasted text or after Admin installs the missing tool.
+  python3 <<PYEOF
+import json
+m = json.load(open("$SDIR/meta.json"))
+m["status"] = "ingest_failed"
+m["termination"] = "ingest_tool_missing"
+json.dump(m, open("$SDIR/meta.json", "w"), indent=2, ensure_ascii=False)
+PYEOF
+  # Clear the active-session pointer so the Requester can retry immediately.
+  rm -f "$ROOT/users/$REQ_OID/active_session.json"
+  echo "$SID"
+  exit 3
+elif [ $INGEST_RC -eq 0 ]; then
+  echo "[start-review] ingest_ok" >&2
+else
+  echo "[start-review] ingest_failed_fallback_to_text_paste" >&2
+fi
 
 # Step 4: run confirm-topic
 if [ $SEND -eq 1 ]; then

@@ -188,17 +188,30 @@ hint_gh() {
   esac
 }
 
-command -v whisper >/dev/null 2>&1 \
-  && ok "whisper (audio ingest)" \
-  || warn "whisper not installed — audio messages fall back to 'paste text'" "$(hint_whisper)"
-
-command -v pdftotext >/dev/null 2>&1 \
-  && ok "pdftotext (PDF ingest)" \
-  || warn "pdftotext not installed — PDF falls back to 'paste text'" "$(hint_pdftotext)"
+# PDF extraction — blocker. With SOP v2 the main agent routes any PDF
+# straight to ingest.py, so if BOTH pdftotext and pdfminer.six are missing,
+# the Requester's first PDF review will hard-fail (by design, see ingest.py).
+# Block at install time so the user isn't surprised later.
+HAVE_PDFTOTEXT=0
+HAVE_PDFMINER=0
+command -v pdftotext >/dev/null 2>&1 && HAVE_PDFTOTEXT=1
+python3 -c "import pdfminer" 2>/dev/null && HAVE_PDFMINER=1
+if [ $HAVE_PDFTOTEXT -eq 1 ]; then
+  ok "pdftotext (PDF ingest)"
+elif [ $HAVE_PDFMINER -eq 1 ]; then
+  ok "pdfminer.six (PDF ingest, fallback)"
+else
+  fail "no PDF extractor — install pdftotext OR pdfminer.six (PDFs are the most common attachment)" \
+       "$(hint_pdftotext)  # or: pip3 install pdfminer.six"
+fi
 
 command -v tesseract >/dev/null 2>&1 \
   && ok "tesseract (OCR for image ingest)" \
-  || warn "tesseract not installed — image OCR unavailable" "$(hint_tesseract)"
+  || warn "tesseract not installed — Requesters sending images will get a 'paste text' prompt" "$(hint_tesseract)"
+
+command -v whisper >/dev/null 2>&1 \
+  && ok "whisper (audio ingest)" \
+  || warn "whisper not installed — Requesters sending audio will get a 'paste text' prompt" "$(hint_whisper)"
 
 # ─── gh (only needed if cloning via gh, not SSH/HTTPS) ───
 if command -v gh >/dev/null 2>&1; then
