@@ -2,7 +2,28 @@
 
 All notable changes to review-agent are tracked here. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.0.2] — 2026-04-24
+
+### Published to ClawHub
+
+- **Live on ClawHub**: slug `review-agent`, version `2.0.2` (bumped from 2.0.1 to fix an auto-derived display name that included the staging folder path).
+- **Install commands now work**:
+  ```bash
+  clawhub install review-agent           # with user prompt to review code
+  clawhub install review-agent --force   # non-interactive
+  openclaw skills install review-agent   # via openclaw native
+  ```
+- ClawHub holds new/updated skills behind a 30s–2min security scan before making them install-visible. After that, the three commands above resolve.
+
 ## [2.0.1] — 2026-04-24
+
+### Published to ClawHub
+
+- Slug: `review-agent`, published version 2.0.1 (ClawHub ID `k977gfc9sm9pd4kz1m9dz129yh85frrr`).
+- Install via: `clawhub install review-agent` or `openclaw skills install review-agent`.
+- ClawHub bundle is the lean skill (SKILL.md + scripts + references + README + uninstall.sh + update.sh — ~30 files). The heavier openclaw-level setup (workspace template + installer + admin tools) stays in the standalone skill repo + monorepo.
+
+
 
 ### Added
 
