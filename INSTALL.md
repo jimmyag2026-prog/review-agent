@@ -313,6 +313,17 @@ systemctl --user reset-failed hermes-gateway
 systemctl --user restart hermes-gateway
 ```
 
+**"每个新 Requester 第一次 DM bot 都看到 `📬 No home channel is set for Feishu ...`"**
+→ hermes 的内建新用户引导，当 `FEISHU_HOME_CHANNEL` env 变量没设或 gateway 启动后才设的时候每个新用户第一次消息都会弹一次（见 `gateway/run.py` 第 3431 行）。对 review-agent 的 Requester 是纯噪音——他们既看不懂又没权限设置。
+修法:
+```bash
+# 1. 把自己的 open_id 作为 home channel（cron 结果也会发到你 DM）
+echo 'FEISHU_HOME_CHANNEL=ou_your_admin_open_id' >> ~/.hermes/.env
+# 2. 重启 gateway 让新 env 生效（hermes 只在启动时读 .env）
+hermes gateway restart
+```
+注意: 已经 DM 过 bot 的老用户不会再看到这条（hermes 按 `not history` 判断首次），只影响全新 Requester。
+
 **"lark-doc-publish 报 scope 错误"**
 → 在 Lark 开发者后台给 bot 加：`im:message:send_as_bot`, `im:message`, `docx:document`, `drive:file`, `drive:drive`
 

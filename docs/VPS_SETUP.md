@@ -387,6 +387,15 @@ systemctl --user restart hermes-gateway
 **fail2ban drops SSH after rapid reconnects**
 → Multiple back-to-back `ssh`/`scp` trips your own VPS's fail2ban. Bundle commands into one SSH session (`ssh host -- 'cmd1 && cmd2'`) or wait for the ban window to clear (`until nc -z your.vps.ip 22; do sleep 5; done`).
 
+**Every new Requester sees `📬 No home channel is set for Feishu ...` on their first DM**
+→ Hermes' built-in onboarding message. Fires once per new user when `FEISHU_HOME_CHANNEL` env var is unset OR when the running gateway started before the var was added (hermes only reads `.env` at startup — see `gateway/run.py:3431`). Fix:
+```bash
+# Use your Admin open_id — also doubles as the target for any cron/cross-platform deliveries
+echo 'FEISHU_HOME_CHANNEL=ou_your_admin_open_id' >> ~/.hermes/.env
+systemctl --user restart hermes-gateway    # or: hermes gateway restart
+```
+Older Requesters who already messaged the bot won't see it again — the check only fires on a user's very first interaction.
+
 **High RAM usage**
 → Normal is ~200-400MB. If > 1GB, check `~/.hermes/logs/` for runaway session files. Consider archiving old sessions:
 ```bash
