@@ -2,6 +2,77 @@
 
 All notable changes to review-agent are tracked here. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.0.0] — 2026-04-24
+
+**First openclaw port.** Lives under `openclaw-v2/` as a separate subtree; hermes v1.x is unchanged on `main` and still supported. Pick one runtime per machine — you can't have both hermes and openclaw claiming the same Lark bot.
+
+### Why
+
+v1 on hermes routes every Lark DM through a single main agent, using a MEMORY.md SOP to decide "is this Requester A's review or Requester B's?". Context isolation is documentation-enforced (see v1 `OPEN_ISSUES.md#I-001`). In v2 on openclaw, every peer gets a **dedicated subagent** with its own workspace and session history — isolation is architectural.
+
+### Architecture delta
+
+| Dimension | v1 (hermes) | v2 (openclaw) |
+|---|---|---|
+| Per-Requester agent | Shared main agent + SOP routing | Dedicated subagent per peer (auto-spawned on first DM) |
+| State storage | `~/.review-agent/users/<oid>/...` | `~/.openclaw/workspace-feishu-dm-<oid>/...` |
+| Persona injection | `agent_persona.md` pulled per script | Workspace `SOUL.md` + `AGENTS.md` + `IDENTITY.md` loaded natively |
+| Outbound Lark | `send-lark.sh` shell wrapper | Native `feishu_chat` tool |
+| Lark doc publish | `lark-doc-publish.py` + raw API | Native `feishu_doc` tool |
+| Responder profile | Per-user `profile.md` | Global `~/.openclaw/review-agent/responder-profile.md`, symlinked per peer |
+| Routing | MEMORY.md SOP (prompt-based) | `dynamicAgents` + `bindings` (config-based) |
+| SOP install | Required (`patch_memory_sop.py`) | Dropped |
+| Display config patch | Required (`patch_hermes_config.py`) | Dropped (openclaw has native display policies) |
+| User enrollment | Manual `setup.sh` + `add-requester.sh` | Auto on first DM via `dm.createAgentOnFirstMessage` |
+
+### What stays unchanged (same methodology, re-homed)
+
+- Four-pillar review (`scan.py`)
+- Responder simulation layer
+- Six challenge dimensions
+- Q&A loop turn-taking (`qa-step.py`)
+- Final-gate verification (`final-gate.py`)
+- Merge-draft rewrite (`merge-draft.py`)
+- 6-section decision brief (`_build_summary.py`)
+- Ingest hard-fail on missing tools (v1.1.1 behavior preserved)
+- Placeholder guard (`check-profile.py`)
+- Update check (`check-updates.py`)
+- Lenient JSON parser (`_json_repair.py`)
+- Model-follow-config (`_model.py`, now reading `openclaw.json`)
+
+### New in v2
+
+- `openclaw-v2/skill/` — AgentSkills-compatible skill ready to install at `~/.openclaw/skills/review-agent/` (shared across all per-peer subagents)
+- `openclaw-v2/workspace-template/review-agent/` — per-peer workspace template (cloned by openclaw on first DM)
+- `openclaw-v2/install/install-openclaw.sh` — two-phase installer (install + enable), mirrors v1's UX
+- `openclaw-v2/install/patch_openclaw_json.py` — idempotent channel config patcher
+- `openclaw-v2/admin/dashboard-server.py` — dashboard rewired to read `~/.openclaw/workspace-feishu-dm-*/`
+- `openclaw-v2/admin/setup-responder.sh` — edit global responder profile
+- `openclaw-v2/admin/remove-peer.sh` — purge workspace + agent + bindings
+- `openclaw-v2/migrate/migrate-v1-to-v2.sh` — one-shot migration from hermes v1
+- `openclaw-v2/docs/DESIGN.md`, `INSTALL_OPENCLAW.md`, `V1_TO_V2_UPGRADE.md`
+
+### Dropped from v2
+
+Everything hermes-specific or replaced by openclaw natives:
+- `send-lark.sh`, `lark-fetch.sh`, `lark-doc-publish.py`, `lark-doc-probe.py`
+- `start-review.sh`, `review-cmd.sh`, `new-session.sh`, `close-session.sh`
+- `setup.sh`, `add-requester.sh`, `add-responder.sh`
+- `patch_memory_sop.py`, `patch_hermes_config.py`
+- `install/orchestrator_sop.md`, `install/hermes_patches/*`
+- `_deliver.py`, `deliver.sh` (subagent sends directly via `feishu_chat`)
+
+### Self-verification (done before release)
+
+- Synthetic 2-peer E2E in `/tmp/ra-v2-e2e/` with real LLM calls:
+  - Ingest handles text content per-workspace, never cross-reads
+  - Scan produced 10/12 findings against each peer's own material
+  - qa-step advanced cursor correctly (p1 accepted → p2)
+  - Zero cross-contamination: peer A findings mention only Postgres, peer B only hiring (validated via substring check)
+- Dashboard reads both peer workspaces, counts sessions per peer
+- Installer patcher idempotency verified against real `openclaw.json`
+- All 12 scripts syntax-clean
+
 ## [1.1.1] — 2026-04-23
 
 Patch release from a one-click-install audit. Closes gaps that would cause a

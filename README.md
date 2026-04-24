@@ -1,10 +1,12 @@
 # review-agent
 
-**An async pre-meeting review coach for hermes + Lark.** Before a Requester gets time with a Responder, review-agent challenges their draft through six dimensions of scrutiny (data / logic / feasibility / stakeholders / risk / ROI), runs them through a Q&A loop until the material is decision-ready, then hands the Responder a distilled pre-read.
+**An async pre-meeting review coach for Lark.** Before a Requester gets time with a Responder, review-agent challenges their draft through six dimensions of scrutiny (data / logic / feasibility / stakeholders / risk / ROI), runs them through a Q&A loop until the material is decision-ready, then hands the Responder a distilled pre-read.
 
 Rooted in the 1942 US Army doctrine of **Completed Staff Work**: "the chief only signs yes or no; all the thinking has been done by staff." Modernized with LLM orchestration + Lark Doc integration.
 
-> **Status**: v1.0 — usable end-to-end on a fresh hermes + Lark install. See [CHANGELOG.md](CHANGELOG.md) for what's in and what's known-limited.
+> **Status**:
+> - **v1.1.1** — stable on hermes (`skill/`, `install/`, root `install.sh`). See [CHANGELOG.md](CHANGELOG.md).
+> - **v2.0** — openclaw port (`openclaw-v2/`). Each Requester gets a dedicated subagent with isolated context — arch-level isolation, no SOP routing. Recommended for multi-Requester setups. See [openclaw-v2/docs/INSTALL_OPENCLAW.md](openclaw-v2/docs/INSTALL_OPENCLAW.md) + [V1_TO_V2_UPGRADE.md](openclaw-v2/docs/V1_TO_V2_UPGRADE.md).
 
 ## What it does
 
