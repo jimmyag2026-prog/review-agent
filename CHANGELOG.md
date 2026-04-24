@@ -2,6 +2,44 @@
 
 All notable changes to review-agent are tracked here. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.1.1] — 2026-04-24 (hotfix)
+
+### 🔴 Fixed — install.sh was bricking the gateway
+
+`patch_openclaw_json.py` in v2.0.0–v2.1.0 wrote the WRONG 4 keys into `channels.feishu`:
+
+```
+channels.feishu.dynamicAgents.enabled = true            # wecom-plugin key, not feishu
+channels.feishu.dynamicAgents.adminBypass = false       # wecom-plugin key
+channels.feishu.dm.createAgentOnFirstMessage = true     # wecom-plugin key
+channels.feishu.workspaceTemplate = "..."               # wecom-plugin key
+```
+
+Feishu's built-in channel schema is **strict** (`additionalProperties: false`) and rejected all four with:
+
+```
+Invalid config at ~/.openclaw/openclaw.json:
+- channels.feishu: invalid config: must NOT have additional properties
+```
+
+→ **gateway refused to start** on every fresh install. This was discovered during live Evie testing today, manually fixed on my own machine, but the SOURCE patcher was never updated — so every `bash install.sh` ran by any user would reproduce the same gateway crash.
+
+### Fix
+
+- `patch_openclaw_json.py` now writes the CORRECT feishu-native key: **`channels.feishu.dynamicAgentCreation`** (single nested object with `enabled`/`workspaceTemplate`/`agentDirTemplate`/`maxAgents`). Schema-valid.
+- Patcher also auto-removes the old wrong keys if they exist from prior runs — so users hit by the v2.0/v2.1.0 bug get automatic recovery on v2.1.1 re-run.
+- Idempotent verified against a polluted test fixture.
+
+### Recovery path for users already on broken v2.0–v2.1.0
+
+```bash
+git pull   # in your bundle repo (or re-clone the standalone skill repo)
+python3 ~/code/review-agent-skill/install/patch_openclaw_json.py
+openclaw gateway restart
+```
+
+The patcher will strip the 3 legacy bad keys and install the correct one. Gateway should start.
+
 ## [2.1.0] — 2026-04-24
 
 Emerged from the first real Lark testing session with Evie as Requester. The v2.0 architecture was sound but the feishu wiring had several undocumented gotchas. This release closes the gap between "it ran once in isolation" and "a new peer DMs the bot and gets a proper review coach."
