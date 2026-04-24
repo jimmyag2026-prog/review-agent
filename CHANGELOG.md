@@ -2,6 +2,24 @@
 
 All notable changes to review-agent are tracked here. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.0.1] — 2026-04-24
+
+### Added
+
+- **`openclaw-v2/skill/uninstall.sh`** — Admin-run removal script. Takes out the skill and workspace template by default; with `--purge` also clears the global responder profile + all peer workspaces + per-peer agent dirs + bindings; with `--revert-config` unsets the `channels.feishu` knobs the skill introduced. Backs up `openclaw.json` before any mutation. Dry-runs by default — requires `--yes` to actually delete.
+- **`openclaw-v2/skill/update.sh`** — self-update script. Fetches the latest skill version from GitHub (standalone skill repo preferred, monorepo fallback), shows current → latest, re-installs into place, restarts openclaw gateway. Supports `--check` / `--force` / `--yes` / `--ref <tag|branch|sha>`. Never touches peer workspaces or global data.
+- **`openclaw-v2/skill/VERSION`** — version stamp for update detection.
+
+### Changed
+
+- **`check-updates.py`** now points at the standalone skill repo `jimmyag2026-prog/review-agent-skill` (monorepo remains as fallback for v1 installs).
+
+### Standalone skill repo published
+
+- GitHub: https://github.com/jimmyag2026-prog/review-agent-skill
+- One-line install: `git clone https://github.com/jimmyag2026-prog/review-agent-skill ~/code/review-agent-skill && cd ~/code/review-agent-skill && bash install.sh`
+- Flat layout: SKILL.md + scripts/ + references/ at root (openclaw/clawhub-discoverable), workspace template + admin tools + migrate script under `assets/`.
+
 ## [2.0.0] — 2026-04-24
 
 **First openclaw port.** Lives under `openclaw-v2/` as a separate subtree; hermes v1.x is unchanged on `main` and still supported. Pick one runtime per machine — you can't have both hermes and openclaw claiming the same Lark bot.

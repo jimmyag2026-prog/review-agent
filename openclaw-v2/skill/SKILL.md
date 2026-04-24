@@ -70,3 +70,18 @@ See `references/`:
 - `annotation_schema.md` — finding JSON schema
 - `summary_template.md` — 6-section brief format
 - `template/` — default `admin_style.md`, `review_rules.md`, `boss_profile.md` (used by install)
+
+## Admin tools (human runs from CLI — NOT invoked by subagent)
+
+These live at the skill root so they travel with distributions. Subagents do NOT
+call them and they're not listed in `AGENTS.md` of peer workspaces.
+
+- `update.sh` — fetch latest skill from GitHub and re-install. Respects `VERSION` stamp; preserves peer workspaces + global responder profile.
+- `uninstall.sh` — remove skill + template. With `--purge`, also removes global config + per-peer workspaces. With `--revert-config`, unsets the `openclaw.json` knobs this skill introduced.
+
+Self-check the installed version any time:
+
+```bash
+cat ~/.openclaw/skills/review-agent/VERSION
+bash ~/.openclaw/skills/review-agent/update.sh --check
+```

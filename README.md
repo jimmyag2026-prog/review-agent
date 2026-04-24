@@ -7,6 +7,8 @@ Rooted in the 1942 US Army doctrine of **Completed Staff Work**: "the chief only
 > **Status**:
 > - **v1.1.1** — stable on hermes (`skill/`, `install/`, root `install.sh`). See [CHANGELOG.md](CHANGELOG.md).
 > - **v2.0** — openclaw port (`openclaw-v2/`). Each Requester gets a dedicated subagent with isolated context — arch-level isolation, no SOP routing. Recommended for multi-Requester setups. See [openclaw-v2/docs/INSTALL_OPENCLAW.md](openclaw-v2/docs/INSTALL_OPENCLAW.md) + [V1_TO_V2_UPGRADE.md](openclaw-v2/docs/V1_TO_V2_UPGRADE.md).
+>
+> **Also published as a standalone skill**: [github.com/jimmyag2026-prog/review-agent-skill](https://github.com/jimmyag2026-prog/review-agent-skill) — single-repo install + self-update + uninstall.
 
 ## What it does
 
