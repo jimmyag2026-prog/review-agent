@@ -9,6 +9,8 @@ Rooted in the 1942 US Army doctrine of **Completed Staff Work**: "the chief only
 > - **v2.0** — openclaw port (`openclaw-v2/`). Each Requester gets a dedicated subagent with isolated context — arch-level isolation, no SOP routing. Recommended for multi-Requester setups. See [openclaw-v2/docs/INSTALL_OPENCLAW.md](openclaw-v2/docs/INSTALL_OPENCLAW.md) + [V1_TO_V2_UPGRADE.md](openclaw-v2/docs/V1_TO_V2_UPGRADE.md).
 >
 > **Also published as a standalone skill**: [github.com/jimmyag2026-prog/review-agent-skill](https://github.com/jimmyag2026-prog/review-agent-skill) — single-repo install + self-update + uninstall.
+>
+> **Channel support**: v2's per-peer subagent architecture only works on **feishu (Lark)** and **wecom** — those are the two openclaw channels with dynamic-agent auto-spawn. telegram / whatsapp / iMessage / discord / slack / mattermost fall back to shared-main-agent mode (equivalent to v1 hermes, without the MEMORY.md SOP). If your primary channel is one of those, v1 hermes on `main` may be the better fit.
 
 ## What it does
 

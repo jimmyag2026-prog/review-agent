@@ -2,6 +2,44 @@
 
 All notable changes to review-agent are tracked here. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.1.0] — 2026-04-24
+
+Emerged from the first real Lark testing session with Evie as Requester. The v2.0 architecture was sound but the feishu wiring had several undocumented gotchas. This release closes the gap between "it ran once in isolation" and "a new peer DMs the bot and gets a proper review coach."
+
+### Fixed — from live Lark testing
+
+1. **Wrong openclaw.json key for feishu dynamic agents**. v2.0 `patch_openclaw_json.py` copied wecom's `dynamicAgents` / `dm.createAgentOnFirstMessage` / `workspaceTemplate` into `channels.feishu` — but feishu's strict schema rejected all three ("must NOT have additional properties"). The correct key is **`dynamicAgentCreation`** (single nested object with `enabled` / `workspaceTemplate` / `agentDirTemplate` / `maxAgents`). Patcher fixed.
+
+2. **Auto-spawned workspace loaded default "memorist" persona, not review-coach**. openclaw core's `maybeCreateDynamicAgent` only `mkdir`s the peer workspace; the `writeFileIfMissing` step then seeds openclaw's built-in generic-companion templates ("Hey. I just came online. Who am I?"). Our review-coach SOUL.md never got loaded. **New**: `openclaw-v2/install/openclaw_patches/feishu_seed_workspace_patch.py` — idempotent marker-guarded local patch to `monitor-D9C3Olkl.js` that inserts `cp -R <template> <workspace>` between the `mkdir` and openclaw's `writeFileIfMissing`. Our files land first → `writeFileIfMissing` leaves them alone.
+
+3. **`replies=0` on dispatch_complete — subagent emitted `NO_REPLY` or used wrong `target` format**. openclaw's `message` tool accepts either (a) `target` omitted → reply to current DM, or (b) `target: "user:<open_id>"` / `target: "chat:<chat_id>"`. Subagent was passing bare `target: "ou_xxx"` — silently dropped. SOUL.md + AGENTS.md now include explicit JSON examples teaching "omit target" and flagging `NO_REPLY` as a silent-skip pitfall.
+
+4. **"Thinking Process:" markdown headings leaked to Lark**. openclaw's `stripReasoningTagsFromText` only strips XML `<think>...</think>` tags, not markdown. SOUL.md now has a 硬规则 forbidding markdown-style reasoning and directs the model to use `<think>` if reasoning is needed.
+
+5. **Repeated `creating dynamic agent` per DM even with existing binding**. openclaw core re-fires `maybeCreateDynamicAgent` even when bindings already match. Our cp -R seed is idempotent so no data loss, but logs are noisy. Filed as upstream. Documented in FIELD_NOTES.md as "non-issue".
+
+6. **owner.json didn't get populated in the template**. install.sh Phase B writes it correctly; but an intermediate `rsync --delete` during debugging wiped it. Not an install.sh bug per se, but documented in field notes.
+
+7. **LLM prompt-cache stickiness**. Updating SOUL.md mid-session has zero effect on running subagent because openclaw caches the system prompt per agent session. To force a refresh: `rm -f ~/.openclaw/agents/feishu-ou_xxx/sessions/*.jsonl`. Documented in POST_INSTALL.md and FIELD_NOTES.md.
+
+### Changed — per user feedback
+
+- **Top-5 findings by default**. `scan.py` now caps the Q&A queue to the top-5 most important (BLOCKER > IMPROVEMENT > NICE-TO-HAVE). Remainder lives in `cursor.deferred`. `qa-step.py` emits an automatic preamble on the first finding: "我扫到 N 条问题。先带你过最关键的 5 条——过完再看剩下 (N-5) 条要不要继续。" Override with `REVIEW_AGENT_TOP_N` env or `--top-n` flag. Reply `more` / `继续` / `下一批` to pull deferred findings; reply `done` to close.
+- **Attachment-first flow**. SOUL.md decision tree: Step 1 — material present → immediately ingest + review. Step 2 — no material, clear review intent → ask "你有材料要一起看吗？" BEFORE starting review. Step 3 — no review signal → normal chat. Lark wiki URLs pre-fetched via native `feishu_wiki.read`; on scope denial the subagent asks Requester to paste text instead of hallucinating.
+- **SKILL.md description** updated: mentions WeCom compatibility, top-5 default, new `more`/`done` commands, channel-limitation disclaimer.
+
+### Added
+
+- **`openclaw-v2/skill/POST_INSTALL.md`** — Admin-facing quickstart with 3-step checklist, channel compatibility matrix, required Lark scopes, day-to-day admin commands, common troubleshooting. Distributed with the skill so ClawHub users see it on first inspect.
+- **Lark DM auto-send** in `install.sh` Phase B — offers to DM the admin (via Lark Open API direct call) a summary of POST_INSTALL.md with the 3-step checklist.
+- **Channel compatibility matrix** in README.md + DESIGN.md + POST_INSTALL.md — definitively explains per-peer auto-spawn is feishu + wecom only, all other channels fall back to shared-main-agent.
+- **`openclaw-v2/install/openclaw_patches/`** directory for all future openclaw-core local patches.
+- **`openclaw-v2/docs/FIELD_NOTES.md`** — raw debugging journal preserved for future contributors.
+
+### Note
+
+All fixes were validated live with Evie as Requester on 2026-04-24. End-to-end goes: inbound DM → feishu dynamicAgentCreation → template seed (review-coach) → subagent loads SOUL.md → ingest → scan → confirm-topic → Q&A loop → output replies=1 → Lark delivery. Leak check clean (no thinking process, no memorist wording, no NO_REPLY).
+
 ## [2.0.2] — 2026-04-24
 
 ### Published to ClawHub

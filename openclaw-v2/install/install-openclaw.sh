@@ -200,26 +200,99 @@ EOF
     echo "! Run: openclaw gateway restart"
   fi
 
+  # ── Apply the openclaw source patch (seed workspace with our template) ──
+  # Required for feishu dynamic agents to load review-coach persona instead
+  # of openclaw's default memorist template.
+  PATCHER="$SCRIPT_DIR/openclaw_patches/feishu_seed_workspace_patch.py"
+  if [ -f "$PATCHER" ]; then
+    banner "Phase B · Patch openclaw feishu seed (makes per-peer subagents load review-coach, not default)"
+    python3 "$PATCHER" || echo -e "${YELLOW}!${NC} patcher had issues — subagents may fall back to memorist persona. See docs/FIELD_NOTES.md"
+  fi
+
   banner "Done — review-agent v2 ENABLED"
+
+  # ── Offer to DM the Admin a quickstart guide via Lark ──
+  if [ $NON_INTERACTIVE -eq 0 ] && command -v curl >/dev/null 2>&1; then
+    echo
+    read -rp "DM you the post-install quickstart guide via Lark? [Y/n] " ANS
+    case "${ANS:-Y}" in
+      n|N|no|NO) : ;;
+      *)
+        # Try to send POST_INSTALL.md summary to admin via Lark Open API
+        POST_INSTALL="$SKILL_DST/POST_INSTALL.md"
+        APP_ID=$(grep ^FEISHU_APP_ID ~/.hermes/.env 2>/dev/null | cut -d= -f2 | tr -d '"' | tr -d "'" | head -1)
+        APP_SECRET=$(grep ^FEISHU_APP_SECRET ~/.hermes/.env 2>/dev/null | cut -d= -f2 | tr -d '"' | tr -d "'" | head -1)
+        if [ -z "$APP_ID" ]; then
+          # Fallback to openclaw feishu config
+          APP_ID=$(python3 -c "
+import json
+d = json.load(open('$HOME/.openclaw/openclaw.json'))
+print(d.get('channels',{}).get('feishu',{}).get('accounts',{}).get('default',{}).get('appId',''))")
+          APP_SECRET=$(python3 -c "
+import json
+d = json.load(open('$HOME/.openclaw/openclaw.json'))
+print(d.get('channels',{}).get('feishu',{}).get('accounts',{}).get('default',{}).get('appSecret',''))")
+        fi
+        if [ -n "$APP_ID" ] && [ -n "$APP_SECRET" ] && [ -f "$POST_INSTALL" ]; then
+          echo "  sending quickstart to your Lark DM (open_id=$ADMIN_OID)…"
+          python3 <<PYEOF
+import json, urllib.request
+app_id, app_secret, admin_oid = "$APP_ID", "$APP_SECRET", "$ADMIN_OID"
+# tenant token
+r = urllib.request.urlopen(urllib.request.Request(
+    "https://open.larksuite.com/open-apis/auth/v3/tenant_access_token/internal",
+    data=json.dumps({"app_id": app_id, "app_secret": app_secret}).encode(),
+    headers={"Content-Type":"application/json"}), timeout=10)
+token = json.loads(r.read())["tenant_access_token"]
+# Digest of POST_INSTALL.md as text (trim to ~1500 chars)
+txt = open("$POST_INSTALL").read()
+# First 1500 chars — enough for the checklist; full file lives on disk
+msg = f"🔧 review-agent v2 安装完成\\n\\n全文见 ~/.openclaw/skills/review-agent/POST_INSTALL.md\\n\\n3 步 Admin checklist:\\n\\n1) 跑 openclaw seed patch:\\n   python3 ~/code/review-agent-skill/install/openclaw_patches/feishu_seed_workspace_patch.py\\n\\n2) 编辑你的 Responder profile:\\n   bash ~/code/review-agent-skill/assets/admin/setup-responder.sh\\n\\n3) openclaw gateway restart\\n\\n然后让一个 colleague DM 你的 bot 测试。gateway.log 看到 replies=1 就 OK。\\n\\n详细故障排查 + channel 兼容性 + uninstall 命令都在 POST_INSTALL.md 里。"
+body = json.dumps({"receive_id": admin_oid, "msg_type":"text", "content": json.dumps({"text": msg})})
+req = urllib.request.Request(
+    "https://open.larksuite.com/open-apis/im/v1/messages?receive_id_type=open_id",
+    data=body.encode(), headers={"Authorization":f"Bearer {token}","Content-Type":"application/json"})
+try:
+    r = urllib.request.urlopen(req, timeout=10)
+    print("  ✓ quickstart DMed to your Lark")
+except Exception as e:
+    print(f"  ! DM failed (non-fatal): {e}")
+PYEOF
+        else
+          echo "  (skipped — missing Lark app creds or POST_INSTALL.md)"
+        fi
+        ;;
+    esac
+  fi
+
   cat <<EOF
 
-${YELLOW}What happens next:${NC}
+${YELLOW}Post-install checklist (full version in $SKILL_DST/POST_INSTALL.md):${NC}
 
-1. A new Requester DMs your Lark bot → openclaw auto-clones $TEMPLATE_DST
-   to ~/.openclaw/workspace-feishu-dm-<open_id>/ and spawns a dedicated subagent
-   for that peer.
-2. The peer's subagent loads SOUL.md + AGENTS.md + your responder profile.
-3. When the peer sends an attachment or /review start, the subagent invokes
-   the review-agent skill's scripts in their own workspace.
-4. Each peer is context-isolated from every other peer — no MEMORY.md SOP needed.
-
-${BLUE}Edit your Responder profile${NC} (personalize the standards):
+${BLUE}1. Personalize Responder profile${NC} (10 min; bad defaults = generic reviews)
      vim $GLOBAL_RA_DIR/responder-profile.md
 
-${BLUE}Dashboard${NC} (watch sessions across all peer workspaces):
-     bash $REPO_ROOT/admin/dashboard-server.py
+${BLUE}2. Grant Lark app scopes${NC} (for Lark wiki/doc pre-fetch to work):
+     im:message, im:message:send_as_bot, docx:document, wiki:wiki:readonly,
+     drive:file, drive:drive
+     (Lark developer console → your app → Permissions)
 
-${BLUE}Docs${NC}: https://github.com/jimmyag2026-prog/review-agent
+${BLUE}3. Watch the dashboard${NC}:
+     python3 $REPO_ROOT/admin/dashboard-server.py   # http://127.0.0.1:8765
+
+${BLUE}4. First test${NC}: have a colleague DM your bot a proposal or Lark doc URL.
+     In the gateway log you should see:
+       creating dynamic agent "feishu-ou_..."
+       review-agent: seeded
+       dispatch complete (replies=1)
+
+${BLUE}Channel compatibility${NC}:
+  ✅ feishu / wecom → v2 full architecture (per-peer subagent)
+  ❌ telegram / whatsapp / discord / slack / iMessage → fallback to shared
+     main agent (no per-peer isolation). For those, consider hermes v1
+     (https://github.com/jimmyag2026-prog/review-agent).
+
+${BLUE}Full docs${NC}: https://github.com/jimmyag2026-prog/review-agent-skill/blob/main/POST_INSTALL.md
 
 EOF
 }
