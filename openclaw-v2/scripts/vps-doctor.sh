@@ -1,81 +1,88 @@
 #!/bin/bash
-# vps-doctor.sh — auto-diagnose + auto-fix every common review-agent VPS issue.
-# Run as root or as openclaw user. Idempotent. No prompts.
+# vps-doctor.sh — auto-diagnose + auto-fix every common review-agent issue.
+# Run as root or as the openclaw user. Idempotent. No prompts.
 #
-# Fixes:
-#   - missing/incorrect dynamicAgentCreation in openclaw.json
-#   - {responder_name} placeholder unsubstituted in template/peer SOUL.md/AGENTS.md
-#   - missing owner.json (still has owner.json.template)
-#   - missing global responder-profile.md
-#   - broken responder-profile.md symlink in peer workspaces
-#   - cached subagent sessions causing prompt-cache stickiness
-#   - re-seeds all existing peer workspaces from fresh template
-
+# What it heals (each step is a no-op when state is already good):
+#   1. global responder-profile.md present
+#   2. template files: substitute {responder_name} + materialize owner.json
+#   3. re-seed every existing peer workspace from fresh template
+#   4. clear cached subagent sessions (prompt-cache stickiness)
+#   5. patch openclaw.json: dynamicAgentCreation + admin→main binding +
+#      sandbox.docker.binds collision auto-clear + legacy key cleanup
+#   6. ensure peer-workspace seeder watcher is running
+#   7. restart openclaw gateway
+#
+# Usage:
+#   bash vps-doctor.sh                    # auto everything
+#   RESPONDER_NAME=XiaEvie bash vps-doctor.sh  # override responder name
 set -e
 GREEN='\033[0;32m'; YELLOW='\033[0;33m'; RED='\033[0;31m'; NC='\033[0m'
 
-# ── detect user ──
+# ── detect target user + HOME ──
 if [ "$(whoami)" = "root" ]; then
-  RUN="sudo -u openclaw"
-  HOME_OC="/home/openclaw"
+  if id openclaw >/dev/null 2>&1; then
+    TARGET_USER="openclaw"
+    HOME_OC="/home/openclaw"
+    RUN="sudo -u openclaw -H"
+  else
+    TARGET_USER="root"
+    HOME_OC="/root"
+    RUN=""
+  fi
 else
-  RUN=""
+  TARGET_USER="$(whoami)"
   HOME_OC="$HOME"
+  RUN=""
 fi
 
 OC=$HOME_OC/.openclaw
 TEMPLATE=$OC/workspace/templates/review-agent
 GLOBAL_PROFILE=$OC/review-agent/responder-profile.md
+ENABLED_JSON=$OC/review-agent/enabled.json
 
-# ── decide responder name ──
+# ── find script dir for the patcher ──
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PATCHER="$SCRIPT_DIR/../install/patch_openclaw_json.py"
+SETUP_WATCHER="$SCRIPT_DIR/../install/setup_watcher.sh"
+[ ! -f "$PATCHER" ] && PATCHER="$OC/skills/review-agent/install/patch_openclaw_json.py"
+[ ! -f "$SETUP_WATCHER" ] && SETUP_WATCHER="$OC/skills/review-agent/install/setup_watcher.sh"
+
+# ── decide responder name + admin oid ──
 ADMIN_NAME="${RESPONDER_NAME:-}"
-if [ -z "$ADMIN_NAME" ]; then
-  if [ -f "$OC/review-agent/enabled.json" ]; then
-    ADMIN_NAME=$($RUN python3 -c "import json; d=json.load(open('$OC/review-agent/enabled.json')); print(d.get('admin_display_name',''))" 2>/dev/null)
-  fi
-fi
-ADMIN_NAME="${ADMIN_NAME:-Boss}"
-
-# ── decide admin open_id ──
 ADMIN_OID=""
-if [ -f "$OC/review-agent/enabled.json" ]; then
-  ADMIN_OID=$($RUN python3 -c "import json; d=json.load(open('$OC/review-agent/enabled.json')); print(d.get('admin_open_id',''))" 2>/dev/null)
+if [ -f "$ENABLED_JSON" ]; then
+  ADMIN_OID=$($RUN python3 -c "import json; print(json.load(open('$ENABLED_JSON')).get('admin_open_id',''))" 2>/dev/null)
+  [ -z "$ADMIN_NAME" ] && ADMIN_NAME=$($RUN python3 -c "import json; d=json.load(open('$ENABLED_JSON')); print(d.get('admin_display_name','') or d.get('responder_name',''))" 2>/dev/null)
 fi
+[ -z "$ADMIN_NAME" ] && ADMIN_NAME="Responder"
 
 echo "─── review-agent VPS doctor ───"
-echo "  HOME=$HOME_OC  responder_name=$ADMIN_NAME  admin_oid=${ADMIN_OID:-<unknown>}"
+echo "  user=$TARGET_USER  HOME=$HOME_OC"
+echo "  responder_name=$ADMIN_NAME  admin_oid=${ADMIN_OID:-<unknown>}"
 echo
 
-# ── 1. ensure global responder-profile.md ──
+# ── 1. global responder-profile.md ──
 echo "─── 1. global responder-profile.md ───"
-$RUN mkdir -p $OC/review-agent
+$RUN mkdir -p "$OC/review-agent"
 if [ ! -f "$GLOBAL_PROFILE" ]; then
-  for src in $TEMPLATE/responder-profile.md $TEMPLATE/../../skills/review-agent/references/template/boss_profile.md $HOME_OC/.openclaw/skills/review-agent/references/template/boss_profile.md $HOME_OC/.openclaw/workspace/skills/review-agent/references/template/boss_profile.md; do
-    [ -f "$src" ] && [ ! -L "$src" ] && $RUN cp "$src" "$GLOBAL_PROFILE" && break
-  done
-  if [ -f "$GLOBAL_PROFILE" ]; then
-    echo "  ✓ created from default boss_profile template"
-  else
-    $RUN bash -c "cat > $GLOBAL_PROFILE <<EOF
+  $RUN bash -c "cat > $GLOBAL_PROFILE <<EOF
 # Responder Profile
 Name: $ADMIN_NAME
 Decision style: data-first, fast yes/no
-Pet peeves: vague asks, no numbers, recommendations creating follow-up work
-Always ask: What's the smallest version testable in a week? Who disagrees?
+Pet peeves: vague asks, no numbers
+Always asks: smallest version testable in a week? who disagrees?
 EOF"
-    echo "  ✓ created minimal default"
-  fi
+  echo "  ✓ created minimal default"
 else
   echo "  ✓ exists"
 fi
 
-# ── 2. fix template files: substitute {responder_name} + materialize owner.json ──
+# ── 2. template substitution ──
 echo "─── 2. template substitution ───"
 if [ -d "$TEMPLATE" ]; then
   for f in SOUL.md AGENTS.md BOOTSTRAP.md HEARTBEAT.md IDENTITY.md USER.md; do
-    [ -f "$TEMPLATE/$f" ] && $RUN sed -i "s|{responder_name}|$ADMIN_NAME|g" "$TEMPLATE/$f"
+    [ -f "$TEMPLATE/$f" ] && $RUN sed -i.bak "s|{responder_name}|$ADMIN_NAME|g" "$TEMPLATE/$f" && $RUN rm -f "$TEMPLATE/$f.bak"
   done
-  # materialize owner.json from .template if not present
   if [ -f "$TEMPLATE/owner.json.template" ] && [ ! -f "$TEMPLATE/owner.json" ]; then
     $RUN bash -c "cat > $TEMPLATE/owner.json <<EOF
 {
@@ -85,11 +92,9 @@ if [ -d "$TEMPLATE" ]; then
   \"responder_name\": \"$ADMIN_NAME\"
 }
 EOF"
-    $RUN rm -f $TEMPLATE/owner.json.template
+    $RUN rm -f "$TEMPLATE/owner.json.template"
   fi
-  # remove the install marker if any
-  $RUN rm -f $TEMPLATE/responder-profile.md.INSTALL_SHOULD_SYMLINK
-  # responder-profile.md → symlink to global
+  $RUN rm -f "$TEMPLATE/responder-profile.md.INSTALL_SHOULD_SYMLINK"
   $RUN bash -c "[ -L $TEMPLATE/responder-profile.md ] || (rm -f $TEMPLATE/responder-profile.md && ln -s $GLOBAL_PROFILE $TEMPLATE/responder-profile.md)"
   echo "  ✓ template ready"
 else
@@ -100,12 +105,18 @@ fi
 # ── 3. re-seed every existing peer workspace from fresh template ──
 echo "─── 3. re-seed existing peer workspaces ───"
 SEEDED=0
-for ws in $OC/workspace-feishu-* $OC/workspace-wecom-*; do
+for ws in "$OC"/workspace-feishu-* "$OC"/workspace-wecom-*; do
   [ -d "$ws" ] || continue
-  $RUN cp -R $TEMPLATE/. $ws/ 2>/dev/null
-  $RUN sed -i "s|{responder_name}|$ADMIN_NAME|g" $ws/SOUL.md $ws/AGENTS.md $ws/BOOTSTRAP.md $ws/HEARTBEAT.md $ws/IDENTITY.md $ws/USER.md 2>/dev/null
-  $RUN rm -f $ws/owner.json.template
-  # symlink responder-profile to global
+  # Skip admin's own workspace if it exists (admin → main, no peer)
+  if [ -n "$ADMIN_OID" ] && [[ "$(basename $ws)" == *"$ADMIN_OID"* ]]; then
+    echo "  ! removing admin's stale peer workspace: $(basename $ws)"
+    $RUN rm -rf "$ws"
+    continue
+  fi
+  $RUN cp -R "$TEMPLATE/." "$ws/" 2>/dev/null
+  $RUN sed -i.bak "s|{responder_name}|$ADMIN_NAME|g" "$ws/SOUL.md" "$ws/AGENTS.md" "$ws/BOOTSTRAP.md" "$ws/HEARTBEAT.md" "$ws/IDENTITY.md" "$ws/USER.md" 2>/dev/null
+  $RUN rm -f "$ws"/*.bak 2>/dev/null
+  $RUN rm -f "$ws/owner.json.template"
   $RUN bash -c "[ -L $ws/responder-profile.md ] || (rm -f $ws/responder-profile.md && ln -s $GLOBAL_PROFILE $ws/responder-profile.md)"
   echo "  ✓ $ws"
   SEEDED=$((SEEDED+1))
@@ -115,65 +126,51 @@ done
 # ── 4. clear cached subagent sessions ──
 echo "─── 4. clear subagent prompt-cache ───"
 CLEARED=0
-for ad in $OC/agents/feishu-* $OC/agents/wecom-*; do
+for ad in "$OC/agents/"feishu-* "$OC/agents/"wecom-*; do
   [ -d "$ad/sessions" ] || continue
-  $RUN rm -f $ad/sessions/*.jsonl $ad/sessions/sessions.json $ad/sessions/*.lock 2>/dev/null
+  # Skip admin's own agent dir
+  if [ -n "$ADMIN_OID" ] && [[ "$(basename $ad)" == *"$ADMIN_OID"* ]]; then
+    $RUN rm -rf "$ad"
+    continue
+  fi
+  $RUN bash -c "rm -f $ad/sessions/*.jsonl $ad/sessions/sessions.json $ad/sessions/*.lock 2>/dev/null"
   CLEARED=$((CLEARED+1))
 done
 echo "  ✓ cleared $CLEARED agent's session cache"
 
-# ── 5. fix openclaw.json dynamicAgentCreation if needed ──
-echo "─── 5. openclaw.json dynamicAgentCreation ───"
-$RUN python3 - <<PY
-import json, shutil
-from pathlib import Path
-from datetime import datetime
-p = Path("$OC/openclaw.json")
-if not p.exists():
-    print("  ✗ openclaw.json not found"); raise SystemExit(2)
-d = json.loads(p.read_text())
-f = d.setdefault('channels', {}).setdefault('feishu', {})
-correct = {
-    'enabled': True,
-    'workspaceTemplate': '$HOME_OC/.openclaw/workspace-{agentId}',
-    'agentDirTemplate':  '$HOME_OC/.openclaw/agents/{agentId}/agent',
-    'maxAgents': 100,
-}
-existing = f.get('dynamicAgentCreation') or {}
-if existing != correct:
-    bak = p.with_suffix(f".json.bak.doctor-{datetime.now().strftime('%Y%m%d_%H%M%S')}")
-    shutil.copy2(p, bak)
-    f['dynamicAgentCreation'] = correct
-    # clean legacy bad keys at channels.feishu top level
-    for k in ('dynamicAgents', 'dm', 'workspaceTemplate'):
-        if k in f and k != 'dynamicAgentCreation': del f[k]
-    p.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n")
-    print(f"  ✓ fixed dynamicAgentCreation. backup: {bak.name}")
-else:
-    print("  ✓ already correct")
-PY
+# ── 5. patch openclaw.json ──
+echo "─── 5. patch openclaw.json ───"
+if [ -f "$PATCHER" ]; then
+  ARGS="--openclaw-home $HOME_OC --clear-bad-binds"
+  [ -n "$ADMIN_OID" ] && ARGS="$ARGS --admin-open-id $ADMIN_OID"
+  $RUN python3 "$PATCHER" $ARGS || true
+else
+  echo -e "  ${YELLOW}!${NC} patcher not found at $PATCHER — skipping"
+fi
 
-# ── 6. restart gateway ──
-echo "─── 6. restart openclaw gateway ───"
-if sudo systemctl restart openclaw-gateway 2>/dev/null; then
-  echo "  ✓ restarted (system service)"
+# ── 6. ensure watcher is running ──
+echo "─── 6. ensure peer-workspace seeder watcher ───"
+if [ -f "$SETUP_WATCHER" ]; then
+  bash "$SETUP_WATCHER" --target-user "$TARGET_USER" 2>&1 | tail -5
+else
+  echo -e "  ${YELLOW}!${NC} setup_watcher.sh not found at $SETUP_WATCHER — skipping"
+fi
+
+# ── 7. restart openclaw ──
+echo "─── 7. restart openclaw ───"
+if [ "$(whoami)" = "root" ] && systemctl is-active openclaw >/dev/null 2>&1; then
+  systemctl restart openclaw && echo "  ✓ restarted (system service)"
 elif command -v openclaw >/dev/null 2>&1; then
   $RUN openclaw gateway restart 2>&1 | tail -3
 else
-  echo -e "  ${YELLOW}!${NC} restart manually"
+  echo -e "  ${YELLOW}!${NC} restart manually: systemctl restart openclaw  OR  openclaw gateway restart"
 fi
 
 echo
 echo -e "${GREEN}═══ DONE ═══${NC}"
 echo
-echo "Now:"
-echo "  1. Have Evie send a NEW DM to the bot"
-echo "  2. Wait 10 seconds"
-echo "  3. Run: $RUN tail -3 $OC/seeder.log"
-echo "  4. Watch the gateway log:"
-echo "       sudo journalctl -u openclaw-gateway --no-pager -f"
-echo "     OR"
-echo "       $RUN tail -F $OC/logs/gateway.log"
-echo
-echo "If still 'Something went wrong', send back full output of:"
-echo "  sudo journalctl -u openclaw-gateway --no-pager -n 40"
+echo "Verify:"
+echo "  1. As Admin, DM bot 'who are you' → expect main agent reply"
+echo "  2. As a different user, DM bot a proposal → expect review-coach"
+echo "  3. tail -F $OC/seeder.log               # watcher log"
+echo "  4. journalctl -u openclaw -f            # gateway log (or ~/.openclaw/logs/gateway.log)"

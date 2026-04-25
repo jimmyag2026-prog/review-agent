@@ -2,6 +2,78 @@
 
 All notable changes to review-agent are tracked here. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.2.0] — 2026-04-25 (architectural fixes from live VPS deployment)
+
+### 🔴 Fixed — 4 catastrophic install-time blockers found during XiaEvie/JE-agent VPS testing
+
+**1. `sandbox.docker.binds` collision bricks every Requester DM**
+
+openclaw's `agents.defaults.sandbox.docker.binds` defaults to bind-mounting `~/.openclaw/workspace/{homebrew,skills,npm}` into every agent sandbox. Per-peer subagents are sandboxed with `allowed_roots = workspace-feishu-<oid>` ONLY — bind sources outside that root get rejected at spawn.
+
+Symptom: every Requester DM dies with "⚠️ Something went wrong while processing your request" because every model in the fallback chain hits:
+
+```
+Sandbox security: bind mount ".../workspace/homebrew:..." outside allowed roots
+(.../workspace-feishu-ou_xxx). Use a dangerous override only when you fully trust this runtime.
+```
+
+This config is created by openclaw's first-run setup (NOT by review-agent), so it's there on every fresh openclaw install.
+
+**Fix**: `patch_openclaw_json.py` now detects bind sources under `/.openclaw/workspace/` that aren't `workspace-feishu-*` or `workspace-wecom-*`, prints a detailed warning, and clears them with `--clear-bad-binds`. `install-openclaw.sh` Phase B passes `--clear-bad-binds` by default. `vps-doctor.sh` does the same.
+
+**2. Admin DM gets routed to a peer subagent (review-coach), not the main agent**
+
+`channels.feishu.dynamicAgentCreation` creates a peer subagent for EVERY new feishu sender — including the Admin themselves. So Admin's chats with the bot get hijacked into a review-coach context (which then asks them to send materials).
+
+**Fix**: `patch_openclaw_json.py --admin-open-id ou_xxx` now writes a `bindings[*]` entry routing the admin's open_id to `agentId: main`. openclaw's binding lookup runs BEFORE dynamicAgentCreation, so admin's DMs always hit the main agent. install.sh Phase B prompts for admin open_id and applies the binding.
+
+**3. monitor.js patch fails silently on newer openclaw builds**
+
+Newer openclaw splits the dynamic-agent creator across multiple `monitor-*.js` files (we counted 8 on the VPS). The anchor regex `mkdir(agentDir, { recursive: true })` matches **none** of them. patcher exits successfully but no patch is applied → review-coach persona never seeds.
+
+**Fix**: dropped monitor.js patch from the default flow. Replaced with a userspace **watcher** that polls/inotify-watches `~/.openclaw/` for new `workspace-feishu-*/wecom-*` dirs and `cp -R` the template within ~1s of creation. The watcher script auto-detects deployment mode:
+
+| Mode | When |
+|---|---|
+| systemd-system | root + dedicated daemon user (e.g. VPS image with `openclaw` user) |
+| systemd-user | regular Linux user install |
+| launchd | macOS |
+| nohup | fallback (no systemd, no launchd) |
+
+monitor.js patch is preserved as `--legacy-patch-monitor-js` for users who want it.
+
+**4. Session prompt-cache stickiness**
+
+openclaw caches the rendered system prompt per session in `agents/<id>/sessions/*.jsonl`. Updating SOUL.md / responder-profile.md doesn't take effect for existing sessions until the cache is cleared.
+
+**Fix**: install.sh Phase B and update.sh both clear `sessions/*.jsonl` for all peer agents at the end. Watcher also clears for newly-seeded peers.
+
+### 🟡 Improvements
+
+- **Daemon-user awareness**: install.sh, check_prereqs.sh, vps-doctor.sh, setup_watcher.sh all detect `root + openclaw user exists` → install as the openclaw user. Honor `--target-user` and `OPENCLAW_HOME` env. Solves the prior "files installed in /root/.openclaw but daemon runs as openclaw user" footgun.
+- **Admin open_id discovery**: install.sh Phase B now scans `/tmp/openclaw/openclaw-*.log`, `~/.openclaw/logs/gateway.log`, and `journalctl -u openclaw` for recent feishu senders, presents them as suggestions instead of asking the user to ssh and grep.
+- **Admin's stale peer dirs auto-removed**: if Admin previously DM'd the bot before the binding was set, `workspace-feishu-<admin_oid>/` and `agents/feishu-<admin_oid>/` get cleaned on every Phase B run.
+- **enabled.json now records target_user / openclaw_home / admin_display_name / responder_name**: vps-doctor and update.sh use these to skip re-asking.
+- **vps-doctor.sh delegated to patcher + watcher**: was 5 inline Python heredocs, now 1 cohesive heal that just calls the same scripts install.sh uses. Fewer duplications, fewer divergences.
+- **POST_INSTALL.md rewritten**: troubleshooting matrix maps each symptom to the exact script command, channel matrix updated, three-roles definition front-loaded.
+
+### Migration from v2.1.x
+
+```bash
+cd ~/code/review-agent-skill && git pull
+bash install/install-openclaw.sh --enable-only --admin-open-id ou_xxx
+```
+
+Or just run vps-doctor — it heals to v2.2 state idempotently:
+
+```bash
+bash scripts/vps-doctor.sh
+```
+
+### Lessons from XiaEvie / JE-agent live deployment
+
+The four blockers above were each discoverable only with a real Lark Requester pinging a real VPS, because each error happens **inside** the sandboxed subagent and the user-visible message is just "Something went wrong" (the actual sandbox-security stacktrace lives in journalctl). v2.2 install + vps-doctor scripts now check for each one before they bite.
+
 ## [2.1.2] — 2026-04-24 (Linux compat + absolute path hotfix)
 
 ### 🔴 Fixed — two VPS blockers
