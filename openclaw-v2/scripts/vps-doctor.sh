@@ -42,8 +42,8 @@ ENABLED_JSON=$OC/review-agent/enabled.json
 
 # ── find script dir for the patcher ──
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PATCHER="$SCRIPT_DIR/../install/patch_openclaw_json.py"
-SETUP_WATCHER="$SCRIPT_DIR/../install/setup_watcher.sh"
+PATCHER="$SCRIPT_DIR/patch_openclaw_json.py"
+SETUP_WATCHER="$SCRIPT_DIR/setup_watcher.sh"
 [ ! -f "$PATCHER" ] && PATCHER="$OC/skills/review-agent/install/patch_openclaw_json.py"
 [ ! -f "$SETUP_WATCHER" ] && SETUP_WATCHER="$OC/skills/review-agent/install/setup_watcher.sh"
 
@@ -154,6 +154,42 @@ if [ -f "$SETUP_WATCHER" ]; then
   bash "$SETUP_WATCHER" --target-user "$TARGET_USER" 2>&1 | tail -5
 else
   echo -e "  ${YELLOW}!${NC} setup_watcher.sh not found at $SETUP_WATCHER — skipping"
+fi
+
+# ── 6.5. clean stale docker sandbox containers ──
+# When a peer workspace dir is deleted+recreated (e.g., during re-install /
+# re-seed / uninstall+install cycle), the openclaw sandbox container's bind
+# mount still points to the old (now-removed) inode. `docker exec` inside
+# fails with "current working directory is outside of container mount
+# namespace root — possible container breakout detected". openclaw doesn't
+# auto-refresh stale containers, so we stop+rm them here. openclaw will
+# recreate a fresh container with correct mount on the next exec call.
+echo "─── 6.5. stale docker sandbox container cleanup ───"
+if command -v docker >/dev/null 2>&1; then
+  STALE=0
+  for cname in $(docker ps -a --filter "name=openclaw-sbx-agent-feishu-" --format "{{.Names}}" 2>/dev/null); do
+    if ! docker exec "$cname" sh -c "echo ok >/dev/null" 2>/dev/null; then
+      echo "  ! stale: $cname (exec fails — recreating on next message)"
+      docker stop "$cname" >/dev/null 2>&1
+      docker rm "$cname" >/dev/null 2>&1
+      STALE=$((STALE+1))
+    fi
+  done
+  for cname in $(docker ps -a --filter "name=openclaw-sbx-agent-wecom-" --format "{{.Names}}" 2>/dev/null); do
+    if ! docker exec "$cname" sh -c "echo ok >/dev/null" 2>/dev/null; then
+      echo "  ! stale: $cname (exec fails — recreating on next message)"
+      docker stop "$cname" >/dev/null 2>&1
+      docker rm "$cname" >/dev/null 2>&1
+      STALE=$((STALE+1))
+    fi
+  done
+  if [ $STALE -eq 0 ]; then
+    echo "  ✓ all sandbox containers exec OK (or none exist)"
+  else
+    echo "  ✓ removed $STALE stale sandbox container(s)"
+  fi
+else
+  echo "  (docker not installed — skipping; openclaw probably running in non-docker mode)"
 fi
 
 # ── 7. restart openclaw ──
