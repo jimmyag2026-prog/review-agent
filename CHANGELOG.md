@@ -2,6 +2,65 @@
 
 All notable changes to review-agent are tracked here. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.0] — 2026-04-27 (uninstall.sh hardening + audit follow-ups, GH issue #1)
+
+### 🔴 Fixed — uninstall.sh leaves the system in broken state on v2.x installs
+
+[GitHub issue #1](https://github.com/jimmyag2026-prog/review-agent-skill/issues/1) reported that `uninstall.sh --yes --purge --revert-config` on a v2.x install:
+- Left the watcher daemon respawning every 5s (`Restart=always` systemd unit)
+- Skipped peer cleanup (globs used v1's `feishu-dm-*` prefix; v2 uses `feishu-ou_*`)
+- Couldn't revert v2 config keys (looked for v1 `dynamicAgents` not v2 `dynamicAgentCreation`)
+- Could nuke the admin's legitimate `→ main` binding (over-broad `peer.id.startswith('ou_')` filter)
+
+Took 30+ min of manual cleanup to fully uninstall.
+
+#### 7 fixes in uninstall.sh
+
+1. **Watcher teardown** — uninstall now calls `setup_watcher.sh --uninstall` (or inlines the equivalent for systemd-system / systemd-user / launchd / nohup) BEFORE removing files. Stops the respawn loop. Also removes `~/.openclaw/review-agent-seeder.sh` and `seeder.log`.
+
+2. **Glob fix** — `--purge` now matches `workspace-feishu-*` (v2) AND `workspace-feishu-dm-*` (v1 back-compat), instead of v1-only.
+
+3. **Revert covers v2 key** — `--revert-config` now removes `channels.feishu.dynamicAgentCreation` (v2 canonical) plus the legacy v2.0 keys (`dynamicAgents`, `dm.createAgentOnFirstMessage`, `workspaceTemplate`).
+
+4. **Tight binding filter** — `--purge` only removes `bindings[]` entries whose `agentId` matches an agent dir we just removed. Previously removed every `feishu` peer binding starting with `ou_`, including the admin's `→ main` binding (which IS a feishu+ou_ binding but NOT review-agent's to remove). Same for `agents.list` entries.
+
+5. **v1 `/root/.review-agent` cleanup** — `--purge` as root now also removes `/root/.review-agent/` if it exists (v1 era leftovers).
+
+6. **Consolidated snapshot** — any mutation path (`--purge` or `--revert-config`) now writes a single `openclaw.json.bak.uninstall-<ts>` snapshot at the start. Previously each path made its own backup or none at all.
+
+7. **wecom safety** — peer enumeration only includes `workspace-wecom-*` dirs that have the `.review-agent-seeded` marker. memoirist-only wecom peers (e.g., on shared installs where memoirist runs on wecom) stay untouched. Same logic in `peer_agents()`.
+
+### 🟢 Improvements
+
+- Dry-run preview now lists watcher artifacts (systemd unit / launchd plist / seeder script / running PID count) explicitly, so admins know what'll be torn down before running `--yes`.
+- Daemon-user awareness: when invoked as root with `openclaw` user present, uninstall operates against `/home/openclaw/.openclaw/` via `sudo -u openclaw -H` (matches install.sh's logic).
+- VERSION bumped to 2.3.0 in standalone repo, monorepo, and SKILL.md frontmatter.
+- install.sh docstring + post-install banner updated to "v2.3".
+
+### Migration from v2.2.x
+
+`uninstall.sh` is the only file that materially changed. Existing v2.2.x installs are unaffected; just `git pull` to get the safer uninstall when you eventually need it.
+
+### Audit follow-ups carried in (already in 2.2.x)
+
+The v2.2.x patch series already addressed the install-time issues from `research/review_agent_install_audit.md`:
+
+| Issue | Fixed in |
+|---|---|
+| sandbox.binds collision auto-clear | 2.2.0 (default `--clear-bad-binds`) |
+| admin DM hijacked into peer subagent | 2.2.0 (admin → main binding) |
+| monitor.js patch fails on newer openclaw | 2.2.0 (replaced with watcher) |
+| session prompt-cache stickiness | 2.2.0 + 2.2.8 (review-agent peers only) |
+| openclaw 2026.4.24 schema changes | 2.2.2 (drop `unauthorized_dm_behavior`) |
+| watcher infinite-loop on macOS bash 3.2 | 2.2.3 (marker file + content-based check) |
+| skill scripts vs subagent model mismatch | 2.2.4 (read same `agents.defaults.model.primary`) |
+| responder-profile Name placeholder | 2.2.5 (auto-substituted) |
+| admin onboarding wizard | 2.2.6 (5-question guided) |
+| post-install message verbosity | 2.2.7 (one paragraph, no test choreography) |
+| open_id discovery for fresh users | 2.2.8 (clear ctrl-C / re-run instructions) |
+| patcher unsafe writes | 2.2.9 (JSON round-trip + optional doctor check) |
+| watcher install silent failure | 2.2.9 (post-install health check) |
+
 ## [2.2.0] — 2026-04-25 (architectural fixes from live VPS deployment)
 
 ### 🔴 Fixed — 4 catastrophic install-time blockers found during XiaEvie/JE-agent VPS testing
